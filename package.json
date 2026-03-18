@@ -1,0 +1,31 @@
+{
+  "name": "sunlit-web-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "local:open": "powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1",
+    "typecheck": "tsc --noEmit",
+    "generate:object-model": "node scripts/generate-object-model.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-iot": "^3.1008.0",
+    "@aws-sdk/client-s3": "^3.1008.0",
+    "@aws-sdk/client-sts": "^3.1008.0",
+    "@aws-sdk/s3-request-presigner": "^3.1008.0",
+    "@vercel/blob": "^2.3.1",
+    "@xyflow/react": "^12.10.1",
+    "fast-xml-parser": "^5.5.5",
+    "next": "16.1.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.5",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3"
+  }
+}
