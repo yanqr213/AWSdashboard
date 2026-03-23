@@ -13,7 +13,7 @@ export default async function LoginPage() {
 
   return (
     <main className="app-shell auth-page-shell">
-      <AuthForm mode="login" />
+      <AuthForm />
     </main>
   );
 }

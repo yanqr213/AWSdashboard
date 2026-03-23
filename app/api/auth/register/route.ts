@@ -9,9 +9,5 @@ export async function POST(request: NextRequest) {
   };
 
   const result = await registerUser(body.email || "", body.password || "");
-  if (!result.ok) {
-    return NextResponse.json(result, { status: 400 });
-  }
-
-  return NextResponse.json(result);
+  return NextResponse.json(result, { status: 403 });
 }

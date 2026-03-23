@@ -21,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "TB 设备平台",
-  description: "基于物模型中文字段的 TB 设备监控、历史数据与 OTA 管理平台。",
+  description: "基于物模型中文字段的 TB 设备监控与账号管理平台。",
 };
 
 export default async function RootLayout({
@@ -43,9 +43,16 @@ export default async function RootLayout({
               <Link href="/" className="site-nav-link">
                 设备监控
               </Link>
-              <Link href="/ota" className="site-nav-link">
-                OTA 管理
-              </Link>
+              {user ? (
+                <Link href="/support" className="site-nav-link">
+                  服务工具
+                </Link>
+              ) : null}
+              {user ? (
+                <Link href="/account" className="site-nav-link">
+                  账号设置
+                </Link>
+              ) : null}
               {user?.role === "super-admin" ? (
                 <Link href="/admin/users" className="site-nav-link">
                   账号管理
@@ -59,14 +66,9 @@ export default async function RootLayout({
                   <LogoutButton />
                 </>
               ) : (
-                <>
-                  <Link href="/login" className="site-nav-link">
-                    登录
-                  </Link>
-                  <Link href="/register" className="site-nav-link">
-                    注册
-                  </Link>
-                </>
+                <Link href="/login" className="site-nav-link">
+                  登录
+                </Link>
               )}
             </div>
           </nav>

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
-import { getDashboardState } from "@/lib/iot-platform";
+import { getDashboardDetailState, getDashboardHistoryState, getDashboardState } from "@/lib/iot-platform";
 
 function parseHours(value: string | null) {
+  if (value === null || value.trim() === "") {
+    return undefined;
+  }
+
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const dataset = searchParams.get("dataset") || "current";
   const format = searchParams.get("format") || (dataset === "snapshot" ? "json" : "csv");
-  const state = await getDashboardState({
+  const query = {
     environment: searchParams.get("environment") || undefined,
     deviceId: searchParams.get("deviceId") || undefined,
     metricId: searchParams.get("metricId") || undefined,
@@ -44,29 +48,41 @@ export async function GET(request: NextRequest) {
     startAt: searchParams.get("startAt") || undefined,
     endAt: searchParams.get("endAt") || undefined,
     hours: parseHours(searchParams.get("hours")),
-  });
+  };
+  const fullState = format === "json" || dataset === "objects" || dataset === "payloads" ? await getDashboardState(query) : null;
+  const detailState = dataset === "current" ? await getDashboardDetailState(query) : null;
+  const historyState = dataset === "history" ? await getDashboardHistoryState(query) : null;
+  const selectedEnvironment = fullState?.selectedEnvironment || detailState?.selectedEnvironment || historyState?.selectedEnvironment;
+  const selectedDeviceId = fullState?.selectedDeviceId || detailState?.selectedDeviceId || historyState?.selectedDeviceId;
+  const selectedMetricId = fullState?.selectedMetricId || detailState?.selectedMetricId || historyState?.selectedMetricId;
+  const historyWindowHours = fullState?.historyWindowHours || detailState?.historyWindowHours || query.hours || 24;
 
-  const filenameBase = `tb-iot-${state.selectedEnvironment.key}-${state.selectedDeviceId || "fleet"}-${dataset}`;
+  if (!selectedEnvironment) {
+    return NextResponse.json({ ok: false, error: "无法生成导出数据。" }, { status: 400 });
+  }
+
+  const filenameBase = `tb-iot-${selectedEnvironment.key}-${selectedDeviceId || "fleet"}-${dataset}`;
 
   if (format === "json") {
     const snapshot = {
       dataset,
       exportedAt: new Date().toISOString(),
       filters: {
-        environment: state.selectedEnvironment.key,
-        deviceId: state.selectedDeviceId,
-        metricId: state.selectedMetricId,
-        deviceSearch: state.deviceSearch,
-        fieldSearch: state.fieldSearch,
-        startAt: state.startAt,
-        endAt: state.endAt,
-        hours: state.historyWindowHours,
+        environment: fullState?.selectedEnvironment.key,
+        deviceId: fullState?.selectedDeviceId,
+        metricId: fullState?.selectedMetricId,
+        deviceSearch: fullState?.deviceSearch,
+        fieldSearch: fullState?.fieldSearch,
+        startAt: fullState?.startAt,
+        endAt: fullState?.endAt,
+        hours: fullState?.historyWindowHours,
       },
-      currentValues: state.currentValues,
-      historySeries: state.historySeries,
-      recentObjects: state.recentObjects,
-      payloadPreviews: state.payloadPreviews,
-      otaArtifacts: state.otaArtifacts,
+      currentValues: fullState?.currentValues || [],
+      decodedFaults: fullState?.decodedFaults || [],
+      historySeries: fullState?.historySeries || [],
+      recentObjects: fullState?.recentObjects || [],
+      payloadPreviews: fullState?.payloadPreviews || [],
+      otaArtifacts: fullState?.otaArtifacts || [],
     };
 
     return new NextResponse(JSON.stringify(snapshot, null, 2), {
@@ -79,13 +95,13 @@ export async function GET(request: NextRequest) {
 
   const datasetRows =
     dataset === "history"
-      ? state.historySeries.map((point) => ({
+      ? (historyState?.rawHistorySeries || historyState?.historySeries || []).map((point) => ({
           timestamp: new Date(point.timestamp).toISOString(),
           value: point.value,
-          metricId: state.selectedMetricId,
+          metricId: selectedMetricId,
         }))
       : dataset === "objects"
-        ? state.recentObjects.map((object) => ({
+        ? (fullState?.recentObjects || []).map((object) => ({
             bucket: object.bucket,
             key: object.key,
             classification: object.classification,
@@ -95,7 +111,7 @@ export async function GET(request: NextRequest) {
             url: object.url,
           }))
         : dataset === "payloads"
-          ? state.payloadPreviews.map((preview) => ({
+          ? (fullState?.payloadPreviews || []).map((preview) => ({
               bucket: preview.bucket,
               key: preview.key,
               deviceId: preview.deviceId,
@@ -106,7 +122,7 @@ export async function GET(request: NextRequest) {
               metricCount: preview.metricCount,
               snippet: preview.snippet,
             }))
-          : state.currentValues.map((value) => ({
+          : (detailState?.currentValues || []).map((value) => ({
               identifier: value.identifier,
               label: value.label,
               module: value.module,

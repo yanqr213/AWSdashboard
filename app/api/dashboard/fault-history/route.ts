@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
-import { getDashboardState } from "@/lib/iot-platform";
+import { getDashboardFaultHistoryState } from "@/lib/iot-platform";
 
 function parseHours(value: string | null) {
   if (value === null || value.trim() === "") {
@@ -19,12 +19,9 @@ export async function GET(request: NextRequest) {
   }
 
   const searchParams = request.nextUrl.searchParams;
-  const state = await getDashboardState({
+  const state = await getDashboardFaultHistoryState({
     environment: searchParams.get("environment") || undefined,
     deviceId: searchParams.get("deviceId") || undefined,
-    metricId: searchParams.get("metricId") || undefined,
-    deviceSearch: searchParams.get("deviceSearch") || undefined,
-    fieldSearch: searchParams.get("fieldSearch") || undefined,
     startAt: searchParams.get("startAt") || undefined,
     endAt: searchParams.get("endAt") || undefined,
     hours: parseHours(searchParams.get("hours")),

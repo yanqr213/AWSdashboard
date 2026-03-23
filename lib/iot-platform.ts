@@ -10,12 +10,19 @@ import {
 } from "@aws-sdk/client-s3";
 
 import {
+  faultDefinitions,
   findFieldByIdentifier,
+  findFieldsByIdentifier,
+  formatScaledFieldNumericValue,
+  getFieldDisplayUnit,
   getFieldDisplayName,
   getPreferredMetricIdentifiers,
   normalizeMetricKey,
   objectModelFields,
   objectModelModules,
+  resolveMetricField,
+  scaleFieldNumericValue,
+  type FaultDefinition,
   type ObjectModelField,
 } from "@/lib/object-model";
 
@@ -63,6 +70,8 @@ export type BucketStatus = {
 export type DeviceSummary = {
   id: string;
   label: string;
+  productKey: string | null;
+  modelLabel: string;
   objectCount: number;
   otaCount: number;
   metricCount: number;
@@ -72,7 +81,9 @@ export type DeviceSummary = {
 
 export type CurrentMetricValue = {
   identifier: string;
+  canonicalIdentifier: string;
   label: string;
+  shortCode: string;
   module: string;
   access: string;
   dataType: string;
@@ -86,6 +97,31 @@ export type CurrentMetricValue = {
 export type MetricHistoryPoint = {
   timestamp: number;
   value: number;
+};
+
+export type DecodedFaultEntry = {
+  group: string;
+  groupBit: number | null;
+  identifier: string;
+  identifierBit: number | null;
+  sourceIdentifier: string;
+  sourceLabel: string;
+  severity: string;
+  code: string;
+  category: string;
+  display: string;
+  name: string;
+  meaning: string;
+  description: string;
+  nameEn: string;
+  rawValue: number;
+  rawHex: string;
+  maskHex: string;
+};
+
+export type FaultHistoryEntry = DecodedFaultEntry & {
+  timestamp: number;
+  sourceKey: string;
 };
 
 export type OtaArtifact = {
@@ -137,6 +173,94 @@ export type QueryStats = {
   fetchBudget: number;
 };
 
+export type RecentDailySummary = {
+  day: string;
+  sampleCount: number;
+  lastReportedAt: number | null;
+  generation: string;
+  gridCharge: string;
+  peakOutputPower: string;
+};
+
+export type DashboardConfigStatus = {
+  hasAwsCredentials: boolean;
+  hasBucketConfig: boolean;
+  liveAccessReady: boolean;
+};
+
+export type DashboardFleetSummary = {
+  totalDevices: number;
+  model500Count: number;
+  model500ProCount: number;
+  latestReportedAt: number | null;
+};
+
+export type DashboardListState = {
+  environments: PlatformEnvironment[];
+  selectedEnvironment: PlatformEnvironment;
+  dataSourceMode: "s3" | "local" | "none";
+  deviceSearch: string;
+  deviceType: "all" | "500" | "500PRO";
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  deviceOptions: DeviceSummary[];
+  fleetSummary: DashboardFleetSummary;
+  queryStats: QueryStats;
+  configStatus: DashboardConfigStatus;
+  notices: string[];
+};
+
+export type SupportFollowUpDevice = {
+  id: string;
+  label: string;
+  modelLabel: string;
+  metricCount: number;
+  lastSeen: number | null;
+  issueLevel: "high" | "medium" | "normal";
+  issueLabel: string;
+  actionHint: string;
+};
+
+export type SupportWorkbenchSummary = {
+  totalDevices: number;
+  activeWithin24Hours: number;
+  stale24Hours: number;
+  stale72Hours: number;
+  neverReported: number;
+  latestReportedAt: number | null;
+};
+
+export type SupportWorkbenchState = {
+  environments: PlatformEnvironment[];
+  selectedEnvironment: PlatformEnvironment;
+  dataSourceMode: "s3" | "local" | "none";
+  summary: SupportWorkbenchSummary;
+  followUpDevices: SupportFollowUpDevice[];
+  queryStats: QueryStats;
+  configStatus: DashboardConfigStatus;
+  notices: string[];
+};
+
+export type DashboardDetailState = {
+  environments: PlatformEnvironment[];
+  selectedEnvironment: PlatformEnvironment;
+  dataSourceMode: "s3" | "local" | "none";
+  selectedDeviceId: string | null;
+  selectedDevice: DeviceSummary | null;
+  selectedMetricId: string | null;
+  historyWindowHours: number;
+  currentValues: CurrentMetricValue[];
+  decodedFaults: DecodedFaultEntry[];
+  historySeries: MetricHistoryPoint[];
+  metricOptions: Array<{ identifier: string; label: string }>;
+  recentDailySummaries: RecentDailySummary[];
+  queryStats: QueryStats;
+  configStatus: DashboardConfigStatus;
+  notices: string[];
+};
+
 export type DashboardState = {
   environments: PlatformEnvironment[];
   selectedEnvironment: PlatformEnvironment;
@@ -151,6 +275,7 @@ export type DashboardState = {
   deviceOptions: DeviceSummary[];
   selectedDevice: DeviceSummary | null;
   currentValues: CurrentMetricValue[];
+  decodedFaults: DecodedFaultEntry[];
   historySeries: MetricHistoryPoint[];
   metricOptions: Array<{ identifier: string; label: string }>;
   otaArtifacts: OtaArtifact[];
@@ -159,20 +284,9 @@ export type DashboardState = {
   bucketStatuses: BucketStatus[];
   ingestionLanes: IngestionLane[];
   payloadPreviews: PayloadPreview[];
-  recentDailySummaries: Array<{
-    day: string;
-    sampleCount: number;
-    lastReportedAt: number | null;
-    generation: string;
-    gridCharge: string;
-    peakOutputPower: string;
-  }>;
+  recentDailySummaries: RecentDailySummary[];
   queryStats: QueryStats;
-  configStatus: {
-    hasAwsCredentials: boolean;
-    hasBucketConfig: boolean;
-    liveAccessReady: boolean;
-  };
+  configStatus: DashboardConfigStatus;
   notices: string[];
 };
 
@@ -188,8 +302,23 @@ export type DashboardHistoryState = {
   notices: string[];
 };
 
+export type DashboardFaultHistoryState = {
+  selectedEnvironment: PlatformEnvironment;
+  dataSourceMode: "s3" | "local" | "none";
+  selectedDeviceId: string | null;
+  historyWindowHours: number;
+  startAt: string;
+  endAt: string;
+  faultHistory: FaultHistoryEntry[];
+  queryStats: QueryStats;
+  notices: string[];
+};
+
 type MetricSample = {
   identifier: string;
+  canonicalIdentifier: string;
+  label: string;
+  shortCode: string;
   timestamp: number;
   value: string | number | boolean | null;
   sourceKey: string;
@@ -215,6 +344,7 @@ type DeviceLiveSnapshotMap = Map<
   {
     metricCount: number;
     lastReportedAt: number | null;
+    productKey: string | null;
   }
 >;
 
@@ -223,10 +353,13 @@ export type DashboardQuery = {
   deviceId?: string;
   metricId?: string;
   deviceSearch?: string;
+  deviceType?: string;
   fieldSearch?: string;
   startAt?: string;
   endAt?: string;
   hours?: number;
+  page?: number;
+  pageSize?: number;
 };
 
 declare global {
@@ -251,16 +384,20 @@ const TIMESTAMP_KEYS = [
 ];
 const LIST_BUDGET = 240;
 const FETCH_BUDGET = 32;
-const HISTORY_FETCH_BUDGET = 64;
+const HISTORY_FETCH_BUDGET = 240;
+const HISTORY_FETCH_OBJECTS_PER_DAY = 960;
+const HISTORY_FETCH_MAX_BUDGET = 10_000;
 const CACHE_TTL_MS = 60_000;
 const MAX_OBJECT_BYTES = 1_500_000;
-const MAX_HISTORY_POINTS = 56;
+const MAX_HISTORY_POINTS = 360;
+const DEFAULT_HISTORY_WINDOW_HOURS = 24;
 const DEFAULT_LOCAL_DATA_ROOT = path.join(process.cwd(), ".local-data", "iot-downloads");
 const LOCAL_FILE_LIMIT = 160;
 const RECENT_IOT_DATE_LIMIT = 10;
-const HISTORY_FULL_CYCLE_DATE_LIMIT = 30;
 const COMMON_PREFIX_LIMIT = 180;
+const HISTORY_FULL_CYCLE_DATE_LIMIT = COMMON_PREFIX_LIMIT;
 const SELECTED_DEVICE_OBJECTS_PER_DAY = 60;
+const HISTORY_SELECTED_DEVICE_OBJECTS_PER_DAY = 960;
 const DEVICE_KEY_TIMEZONE_OFFSET_MS = 8 * 60 * 60 * 1000;
 const OBJECT_FETCH_CONCURRENCY = 8;
 const METRIC_COUNT_CONCURRENCY = 6;
@@ -318,6 +455,57 @@ function writeCache<T>(key: string, value: T, ttlMs = CACHE_TTL_MS) {
   });
 }
 
+function createQueryStats(fetchBudget = FETCH_BUDGET): QueryStats {
+  return {
+    listRequests: 0,
+    objectFetches: 0,
+    objectsDiscovered: 0,
+    objectsParsed: 0,
+    bytesFetched: 0,
+    cacheHits: 0,
+    listBudget: LIST_BUDGET,
+    fetchBudget,
+  };
+}
+
+function buildDashboardConfigStatus(
+  selectedEnvironment: PlatformEnvironment,
+  bucketStatuses: BucketStatus[],
+  localRootDir: string | null,
+): DashboardConfigStatus {
+  return {
+    hasAwsCredentials: hasAwsCredentials(),
+    hasBucketConfig: selectedEnvironment.buckets.length > 0 || Boolean(localRootDir),
+    liveAccessReady: bucketStatuses.some((bucket) => bucket.accessible),
+  };
+}
+
+function buildDashboardFleetSummary(deviceOptions: DeviceSummary[]): DashboardFleetSummary {
+  return deviceOptions.reduce<DashboardFleetSummary>(
+    (summary, device) => {
+      if (device.modelLabel === "500") {
+        summary.model500Count += 1;
+      }
+
+      if (device.modelLabel === "500PRO") {
+        summary.model500ProCount += 1;
+      }
+
+      if (!summary.latestReportedAt || (device.lastSeen || 0) > summary.latestReportedAt) {
+        summary.latestReportedAt = device.lastSeen;
+      }
+
+      return summary;
+    },
+    {
+      totalDevices: deviceOptions.length,
+      model500Count: 0,
+      model500ProCount: 0,
+      latestReportedAt: null,
+    },
+  );
+}
+
 function splitCsv(value: string | undefined) {
   return (value || "")
     .split(",")
@@ -327,6 +515,146 @@ function splitCsv(value: string | undefined) {
 
 function normalizeSearchTerm(value: string | undefined) {
   return (value || "").trim();
+}
+
+function normalizeListDeviceType(value: string | undefined): "all" | "500" | "500PRO" {
+  return value === "500" || value === "500PRO" ? value : "all";
+}
+
+function normalizePositiveInteger(value: number | undefined, fallback: number) {
+  if (!Number.isFinite(value) || (value || 0) < 1) {
+    return fallback;
+  }
+
+  return Math.floor(value as number);
+}
+
+function buildSupportWorkbenchSummary(deviceOptions: DeviceSummary[]): SupportWorkbenchSummary {
+  const now = Date.now();
+
+  return deviceOptions.reduce<SupportWorkbenchSummary>(
+    (summary, device) => {
+      if (!summary.latestReportedAt || (device.lastSeen || 0) > summary.latestReportedAt) {
+        summary.latestReportedAt = device.lastSeen;
+      }
+
+      if (!device.lastSeen) {
+        summary.neverReported += 1;
+        return summary;
+      }
+
+      const ageHours = (now - device.lastSeen) / (1000 * 60 * 60);
+      if (ageHours <= 24) {
+        summary.activeWithin24Hours += 1;
+      }
+
+      if (ageHours > 24) {
+        summary.stale24Hours += 1;
+      }
+
+      if (ageHours > 72) {
+        summary.stale72Hours += 1;
+      }
+
+      return summary;
+    },
+    {
+      totalDevices: deviceOptions.length,
+      activeWithin24Hours: 0,
+      stale24Hours: 0,
+      stale72Hours: 0,
+      neverReported: 0,
+      latestReportedAt: null,
+    },
+  );
+}
+
+function buildSupportFollowUpDevices(deviceOptions: DeviceSummary[]) {
+  const now = Date.now();
+
+  return [...deviceOptions]
+    .map<SupportFollowUpDevice>((device) => {
+      if (!device.lastSeen) {
+        return {
+          id: device.id,
+          label: device.label,
+          modelLabel: device.modelLabel,
+          metricCount: device.metricCount,
+          lastSeen: device.lastSeen,
+          issueLevel: "high",
+          issueLabel: "未发现上报",
+          actionHint: "优先核对设备是否完成配网、激活以及站点供电。",
+        };
+      }
+
+      const ageHours = (now - device.lastSeen) / (1000 * 60 * 60);
+      if (ageHours > 72) {
+        return {
+          id: device.id,
+          label: device.label,
+          modelLabel: device.modelLabel,
+          metricCount: device.metricCount,
+          lastSeen: device.lastSeen,
+          issueLevel: "high",
+          issueLabel: "超 72 小时未上报",
+          actionHint: "建议售后优先联系现场，检查供电、联网和逆变器工作状态。",
+        };
+      }
+
+      if (ageHours > 24) {
+        return {
+          id: device.id,
+          label: device.label,
+          modelLabel: device.modelLabel,
+          metricCount: device.metricCount,
+          lastSeen: device.lastSeen,
+          issueLevel: "medium",
+          issueLabel: "超 24 小时未上报",
+          actionHint: "建议客服先确认客户现场网络和设备在线状态。",
+        };
+      }
+
+      if (device.metricCount < 15) {
+        return {
+          id: device.id,
+          label: device.label,
+          modelLabel: device.modelLabel,
+          metricCount: device.metricCount,
+          lastSeen: device.lastSeen,
+          issueLevel: "medium",
+          issueLabel: "字段偏少",
+          actionHint: "建议确认物模型上报是否完整，必要时查看设备详情和历史数据。",
+        };
+      }
+
+      return {
+        id: device.id,
+        label: device.label,
+        modelLabel: device.modelLabel,
+        metricCount: device.metricCount,
+        lastSeen: device.lastSeen,
+        issueLevel: "normal",
+        issueLabel: "状态正常",
+        actionHint: "可作为常规客服回访设备。",
+      };
+    })
+    .sort((left, right) => {
+      const severityOrder = { high: 0, medium: 1, normal: 2 } as const;
+      if (severityOrder[left.issueLevel] !== severityOrder[right.issueLevel]) {
+        return severityOrder[left.issueLevel] - severityOrder[right.issueLevel];
+      }
+
+      if (left.lastSeen === null && right.lastSeen !== null) {
+        return -1;
+      }
+
+      if (left.lastSeen !== null && right.lastSeen === null) {
+        return 1;
+      }
+
+      return (left.lastSeen || 0) - (right.lastSeen || 0);
+    })
+    .slice(0, 12);
 }
 
 function matchesSearch(value: string | null | undefined, searchTerm: string) {
@@ -607,6 +935,52 @@ async function listBucketObjects(
   return objects;
 }
 
+async function listBucketObjectsByPrefix(
+  client: S3Client,
+  environment: PlatformEnvironment,
+  bucket: string,
+  prefix: string,
+  limit: number | null,
+  stats: QueryStats,
+) {
+  const normalizedLimit = limit === null ? "all" : String(limit);
+  const cacheKey = `prefix-list:${environment.key}:${bucket}:${prefix}:${normalizedLimit}`;
+  const cached = readCache<PlatformObjectPreview[]>(cacheKey);
+
+  if (cached) {
+    stats.cacheHits += 1;
+    return cached;
+  }
+
+  const objects: PlatformObjectPreview[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    stats.listRequests += 1;
+    const remaining = limit === null ? 1000 : Math.max(1, Math.min(1000, limit - objects.length));
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix || undefined,
+        MaxKeys: remaining,
+        ContinuationToken: continuationToken,
+      }),
+    );
+
+    objects.push(...(response.Contents || []).map((item) => normalizeObject(item, bucket, environment)));
+
+    if (limit !== null && objects.length >= limit) {
+      break;
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  const sliced = limit === null ? objects : objects.slice(0, limit);
+  writeCache(cacheKey, sliced);
+  return sliced;
+}
+
 async function listCommonPrefixes(
   client: S3Client,
   environment: PlatformEnvironment,
@@ -736,6 +1110,7 @@ async function listSelectedDeviceObjects(
   selectedDeviceId: string,
   stats: QueryStats,
   datePrefixLimit = RECENT_IOT_DATE_LIMIT,
+  perDayObjectLimit: number | null = SELECTED_DEVICE_OBJECTS_PER_DAY,
 ) {
   const rootPrefix = environment.prefixHints.find((prefix) => prefix.startsWith("iot-data/")) || "iot-data/";
   const datePrefixes = await listCommonPrefixes(client, environment, bucket, rootPrefix, COMMON_PREFIX_LIMIT, stats);
@@ -747,14 +1122,10 @@ async function listSelectedDeviceObjects(
 
   for (const datePrefix of recentDatePrefixes) {
     const devicePrefix = `${datePrefix}${selectedDeviceId}/`;
-    const deviceObjects = await listLatestBucketObjects(
-      client,
-      environment,
-      bucket,
-      devicePrefix,
-      SELECTED_DEVICE_OBJECTS_PER_DAY,
-      stats,
-    );
+    const deviceObjects =
+      perDayObjectLimit === null
+        ? await listBucketObjectsByPrefix(client, environment, bucket, devicePrefix, null, stats)
+        : await listLatestBucketObjects(client, environment, bucket, devicePrefix, perDayObjectLimit, stats);
     objects.push(...deviceObjects);
   }
 
@@ -820,7 +1191,7 @@ async function collectDeviceMetricCounts(
     .sort()
     .join("|");
   const cacheKey = `device-metric-counts:${environment.key}:${cacheSignature}`;
-  const cached = readCache<Record<string, { metricCount: number; lastReportedAt: number | null }>>(cacheKey);
+  const cached = readCache<Record<string, { metricCount: number; lastReportedAt: number | null; productKey: string | null }>>(cacheKey);
 
   if (cached) {
     stats.cacheHits += 1;
@@ -829,11 +1200,12 @@ async function collectDeviceMetricCounts(
 
   const representativeObjects = await resolveRepresentativeObjectsForDevices(environment, objects, stats);
   if (!representativeObjects.length) {
-    return new Map<string, { metricCount: number; lastReportedAt: number | null }>() as DeviceLiveSnapshotMap;
+    return new Map<string, { metricCount: number; lastReportedAt: number | null; productKey: string | null }>() as DeviceLiveSnapshotMap;
   }
 
   const counts = new Map<string, Set<string>>();
   const timestamps = new Map<string, number | null>();
+  const productKeys = new Map<string, string | null>();
   const client = hasAwsCredentials() && environment.buckets.length ? getS3Client(environment.region) : null;
 
   await forEachWithConcurrency(representativeObjects, METRIC_COUNT_CONCURRENCY, async (object) => {
@@ -870,6 +1242,13 @@ async function collectDeviceMetricCounts(
           if (!latestTimestamp || sample.timestamp > latestTimestamp) {
             timestamps.set(deviceId, sample.timestamp);
           }
+
+          if (!productKeys.get(deviceId) && isDeviceProductKeyIdentifier(sample.identifier)) {
+            const normalizedProductKey = normalizeDeviceProductKey(sample.value);
+            if (normalizedProductKey) {
+              productKeys.set(deviceId, normalizedProductKey);
+            }
+          }
         }
       }
 
@@ -885,6 +1264,7 @@ async function collectDeviceMetricCounts(
       {
         metricCount: identifiers.size,
         lastReportedAt: timestamps.get(deviceId) || null,
+        productKey: productKeys.get(deviceId) || null,
       },
     ]),
   ) as DeviceLiveSnapshotMap;
@@ -1041,6 +1421,7 @@ function collectDeviceSummaries(
   deviceMetricCounts?: DeviceLiveSnapshotMap,
 ) {
   const sampleCounts = new Map<string, Set<string>>();
+  const sampleProductKeys = new Map<string, string | null>();
   for (const sample of samples) {
     const sourceDeviceId = extractDeviceId(sample.sourceKey);
     if (!sourceDeviceId) {
@@ -1050,6 +1431,13 @@ function collectDeviceSummaries(
     const bucket = sampleCounts.get(sourceDeviceId) || new Set<string>();
     bucket.add(sample.identifier);
     sampleCounts.set(sourceDeviceId, bucket);
+
+    if (!sampleProductKeys.get(sourceDeviceId) && isDeviceProductKeyIdentifier(sample.identifier)) {
+      const normalizedProductKey = normalizeDeviceProductKey(sample.value);
+      if (normalizedProductKey) {
+        sampleProductKeys.set(sourceDeviceId, normalizedProductKey);
+      }
+    }
   }
 
   const grouped = new Map<string, DeviceSummary>();
@@ -1066,6 +1454,8 @@ function collectDeviceSummaries(
     const entry = grouped.get(object.deviceId) || {
       id: object.deviceId,
       label: object.deviceId,
+      productKey: deviceMetricCounts?.get(object.deviceId)?.productKey ?? sampleProductKeys.get(object.deviceId) ?? null,
+      modelLabel: getDeviceModelLabel(deviceMetricCounts?.get(object.deviceId)?.productKey ?? sampleProductKeys.get(object.deviceId) ?? null),
       objectCount: 0,
       otaCount: 0,
       metricCount: deviceMetricCounts?.get(object.deviceId)?.metricCount ?? sampleCounts.get(object.deviceId)?.size ?? 0,
@@ -1095,6 +1485,8 @@ function collectDeviceSummaries(
       const existing = grouped.get(deviceId);
       if (existing) {
         existing.metricCount = Math.max(existing.metricCount, snapshot.metricCount);
+        existing.productKey = snapshot.productKey || existing.productKey || sampleProductKeys.get(deviceId) || null;
+        existing.modelLabel = getDeviceModelLabel(existing.productKey);
         existing.lastSeen = snapshot.lastReportedAt || existing.lastSeen;
       }
     }
@@ -1104,6 +1496,8 @@ function collectDeviceSummaries(
     grouped.set(sampleManifest.deviceId, {
       id: sampleManifest.deviceId,
       label: `${sampleManifest.deviceId} (sample OTA)`,
+      productKey: null,
+      modelLabel: "未知",
       objectCount: 1,
       otaCount: sampleManifest.modules.length,
       metricCount: 0,
@@ -1167,6 +1561,36 @@ function getObjectEventTimestamp(object: PlatformObjectPreview) {
   return parseTimestampFromKey(object.key) || object.lastModified;
 }
 
+function normalizeDeviceProductKey(value: MetricSample["value"]) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value === 1 || value === 2 ? String(value) : null;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return parsed === 1 || parsed === 2 ? String(parsed) : null;
+  }
+
+  return null;
+}
+
+function isDeviceProductKeyIdentifier(identifier: string) {
+  const field = findFieldByIdentifier(identifier);
+  return field?.identifier === "PowerKind" || normalizeMetricKey(identifier) === "pk";
+}
+
+function getDeviceModelLabel(productKey: string | null) {
+  if (productKey === "1") {
+    return "500";
+  }
+
+  if (productKey === "2") {
+    return "500PRO";
+  }
+
+  return "未知";
+}
+
 function getSelectedDeviceDateLimit(
   hours: number,
   startTimestamp: number | null,
@@ -1186,6 +1610,82 @@ function getSelectedDeviceDateLimit(
   }
 
   return Math.min(maxDateLimit, Math.max(2, Math.ceil(hours / 24) + 1));
+}
+
+function getHistoryObjectFetchLimit(dateLimit: number) {
+  return Math.min(HISTORY_FETCH_MAX_BUDGET, Math.max(HISTORY_FETCH_BUDGET, dateLimit * HISTORY_FETCH_OBJECTS_PER_DAY));
+}
+
+function getObjectLocalDayKey(object: PlatformObjectPreview) {
+  const prefixMatch = object.key.match(/(20\d{2}-\d{2}-\d{2})(?:\/|$)/);
+  if (prefixMatch) {
+    return prefixMatch[1];
+  }
+
+  const timestamp = getObjectEventTimestamp(object);
+  if (timestamp === null) {
+    return object.key;
+  }
+
+  return new Date(timestamp + DEVICE_KEY_TIMEZONE_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function selectObjectsForParsing(
+  objects: PlatformObjectPreview[],
+  maxObjectsToFetch: number,
+  strategy: "latest" | "balanced-by-day",
+) {
+  if (objects.length <= maxObjectsToFetch || strategy === "latest") {
+    return objects.slice(0, maxObjectsToFetch);
+  }
+
+  const buckets = new Map<string, PlatformObjectPreview[]>();
+
+  for (const object of objects) {
+    const dayKey = getObjectLocalDayKey(object);
+    const bucket = buckets.get(dayKey);
+
+    if (bucket) {
+      bucket.push(object);
+    } else {
+      buckets.set(dayKey, [object]);
+    }
+  }
+
+  const orderedDayKeys = [...buckets.keys()].sort((left, right) => {
+    const leftBucket = buckets.get(left);
+    const rightBucket = buckets.get(right);
+    const leftTimestamp = leftBucket?.[0] ? getObjectEventTimestamp(leftBucket[0]) || 0 : 0;
+    const rightTimestamp = rightBucket?.[0] ? getObjectEventTimestamp(rightBucket[0]) || 0 : 0;
+    return rightTimestamp - leftTimestamp;
+  });
+
+  const selected: PlatformObjectPreview[] = [];
+
+  while (selected.length < maxObjectsToFetch) {
+    let addedInRound = false;
+
+    for (const dayKey of orderedDayKeys) {
+      const bucket = buckets.get(dayKey);
+      const nextObject = bucket?.shift();
+      if (!nextObject) {
+        continue;
+      }
+
+      selected.push(nextObject);
+      addedInRound = true;
+
+      if (selected.length >= maxObjectsToFetch) {
+        break;
+      }
+    }
+
+    if (!addedInRound) {
+      break;
+    }
+  }
+
+  return selected.sort((left, right) => (getObjectEventTimestamp(right) || 0) - (getObjectEventTimestamp(left) || 0));
 }
 
 async function forEachWithConcurrency<T>(
@@ -1214,27 +1714,9 @@ async function listLatestBucketObjects(
   limit: number,
   stats: QueryStats,
 ) {
-  const cacheKey = `latest-list:${environment.key}:${bucket}:${prefix}:${limit}`;
-  const cached = readCache<PlatformObjectPreview[]>(cacheKey);
-
-  if (cached) {
-    stats.cacheHits += 1;
-    return cached;
-  }
-
-  stats.listRequests += 1;
-  const response = await client.send(
-    new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: prefix || undefined,
-      MaxKeys: 1000,
-    }),
-  );
-  const objects = (response.Contents || [])
-    .map((item) => normalizeObject(item, bucket, environment))
+  const objects = (await listBucketObjectsByPrefix(client, environment, bucket, prefix, null, stats))
     .sort((left, right) => (getObjectEventTimestamp(right) || 0) - (getObjectEventTimestamp(left) || 0))
     .slice(0, limit);
-  writeCache(cacheKey, objects);
   return objects;
 }
 
@@ -1317,6 +1799,9 @@ function resolveFieldSample(
   rawValue: unknown,
   timestamp: number,
   sourceKey: string,
+  resolvedIdentifier = field.identifier,
+  resolvedLabel = field.name,
+  resolvedShortCode = field.shortCode || field.identifier,
 ): MetricSample | null {
   const value = coerceScalar(rawValue);
   if (value === undefined) {
@@ -1324,7 +1809,10 @@ function resolveFieldSample(
   }
 
   return {
-    identifier: field.identifier,
+    identifier: resolvedIdentifier,
+    canonicalIdentifier: field.identifier,
+    label: resolvedLabel,
+    shortCode: resolvedShortCode,
     timestamp,
     value,
     sourceKey,
@@ -1471,12 +1959,20 @@ function collectMetricSamples(
   let matchedDirectField = false;
 
   for (const [key, value] of Object.entries(record)) {
-    const field = findFieldByIdentifier(key);
-    if (!field) {
+    const resolvedField = resolveMetricField(key);
+    if (!resolvedField) {
       continue;
     }
 
-    const sample = resolveFieldSample(field, value, recordTimestamp, sourceKey);
+    const sample = resolveFieldSample(
+      resolvedField.field,
+      value,
+      recordTimestamp,
+      sourceKey,
+      resolvedField.identifier,
+      resolvedField.label,
+      resolvedField.shortCode,
+    );
     if (sample) {
       samples.push(sample);
       matchedDirectField = true;
@@ -1509,12 +2005,7 @@ function formatMetricValue(field: ObjectModelField, rawValue: string | number | 
   }
 
   if (typeof rawValue === "number") {
-    const digits = field.step && field.step < 1 ? 2 : 0;
-    const formatted = new Intl.NumberFormat("zh-CN", {
-      maximumFractionDigits: digits,
-      minimumFractionDigits: digits,
-    }).format(rawValue);
-    return field.unit ? `${formatted} ${field.unit}` : formatted;
+    return formatScaledFieldNumericValue(field, scaleFieldNumericValue(field, rawValue));
   }
 
   return String(rawValue);
@@ -1538,12 +2029,14 @@ function buildCurrentValues(samples: MetricSample[]) {
       }
 
       return {
-        identifier: field.identifier,
-        label: field.name,
+        identifier: sample.identifier,
+        canonicalIdentifier: sample.canonicalIdentifier,
+        label: sample.label,
+        shortCode: sample.shortCode,
         module: field.module,
         access: field.access,
         dataType: field.dataType,
-        unit: field.unit,
+        unit: getFieldDisplayUnit(field),
         rawValue: sample.value,
         value: formatMetricValue(field, sample.value),
         timestamp: sample.timestamp,
@@ -1554,39 +2047,101 @@ function buildCurrentValues(samples: MetricSample[]) {
     .sort((left, right) => left.module.localeCompare(right.module) || left.identifier.localeCompare(right.identifier));
 }
 
-function compressSeries(series: MetricHistoryPoint[]) {
-  if (series.length <= MAX_HISTORY_POINTS) {
-    return series;
+function dedupeHistorySeries(series: MetricHistoryPoint[]) {
+  const byTimestamp = new Map<number, MetricHistoryPoint>();
+
+  for (const point of series) {
+    byTimestamp.set(point.timestamp, point);
   }
 
-  const bucketSize = Math.ceil(series.length / MAX_HISTORY_POINTS);
-  const points: MetricHistoryPoint[] = [];
-
-  for (let index = 0; index < series.length; index += bucketSize) {
-    const bucket = series.slice(index, index + bucketSize);
-    const latest = bucket[bucket.length - 1];
-    points.push(latest);
-  }
-
-  return points;
+  return [...byTimestamp.values()].sort((left, right) => left.timestamp - right.timestamp);
 }
 
-function buildMetricOptions(samples: MetricSample[]) {
-  const metricSet = new Set<string>();
+function compressSeries(series: MetricHistoryPoint[]) {
+  const normalizedSeries = dedupeHistorySeries(series);
 
-  for (const sample of samples) {
-    if (typeof sample.value === "number") {
-      metricSet.add(sample.identifier);
+  if (normalizedSeries.length <= MAX_HISTORY_POINTS) {
+    return normalizedSeries;
+  }
+
+  const first = normalizedSeries[0];
+  const last = normalizedSeries[normalizedSeries.length - 1];
+  const interiorPoints = normalizedSeries.slice(1, -1);
+  const maxInteriorPoints = Math.max(0, MAX_HISTORY_POINTS - 2);
+
+  if (!interiorPoints.length || maxInteriorPoints === 0) {
+    return first.timestamp === last.timestamp && first.value === last.value ? [first] : [first, last];
+  }
+
+  const bucketCount = Math.max(1, Math.ceil(maxInteriorPoints / 2));
+  const bucketSize = Math.ceil(interiorPoints.length / bucketCount);
+  const compressed: MetricHistoryPoint[] = [first];
+
+  for (let index = 0; index < interiorPoints.length; index += bucketSize) {
+    const bucket = interiorPoints.slice(index, index + bucketSize);
+    if (!bucket.length) {
+      continue;
+    }
+
+    let minPoint = bucket[0];
+    let maxPoint = bucket[0];
+
+    for (const point of bucket) {
+      if (point.value < minPoint.value) {
+        minPoint = point;
+      }
+
+      if (point.value > maxPoint.value) {
+        maxPoint = point;
+      }
+    }
+
+    const bucketPoints = [minPoint, maxPoint].sort((left, right) => left.timestamp - right.timestamp);
+
+    for (const point of bucketPoints) {
+      const previous = compressed[compressed.length - 1];
+      if (!previous || previous.timestamp !== point.timestamp) {
+        compressed.push(point);
+      }
     }
   }
 
-  const metrics = [...metricSet];
-  const preferred = getPreferredMetricIdentifiers().filter((identifier) => metricSet.has(identifier));
-  const ordered = [...new Set([...preferred, ...metrics.sort()])];
+  const previous = compressed[compressed.length - 1];
+  if (!previous || previous.timestamp !== last.timestamp) {
+    compressed.push(last);
+  }
 
-  return ordered.map((identifier) => ({
-    identifier,
-    label: getFieldDisplayName(identifier),
+  return compressed;
+}
+
+function buildMetricOptions(samples: MetricSample[]) {
+  const latestNumericSamples = new Map<string, MetricSample>();
+
+  for (const sample of samples) {
+    if (typeof sample.value !== "number") {
+      continue;
+    }
+
+    const current = latestNumericSamples.get(sample.identifier);
+    if (!current || sample.timestamp >= current.timestamp) {
+      latestNumericSamples.set(sample.identifier, sample);
+    }
+  }
+
+  const preferred = getPreferredMetricIdentifiers().filter((identifier) => latestNumericSamples.has(identifier));
+  const preferredSet = new Set(preferred);
+  const remaining = [...latestNumericSamples.values()]
+    .filter((sample) => !preferredSet.has(sample.identifier))
+    .sort((left, right) => left.identifier.localeCompare(right.identifier));
+
+  const orderedSamples = [
+    ...preferred.map((identifier) => latestNumericSamples.get(identifier)).filter((sample): sample is MetricSample => sample !== undefined),
+    ...remaining,
+  ];
+
+  return orderedSamples.map((sample) => ({
+    identifier: sample.identifier,
+    label: sample.identifier === sample.canonicalIdentifier ? getFieldDisplayName(sample.identifier) : `${sample.label} (${sample.identifier})`,
   }));
 }
 
@@ -1661,6 +2216,8 @@ function filterCurrentValuesBySearch(currentValues: CurrentMetricValue[], fieldS
   return currentValues.filter((value) => {
     return (
       matchesSearch(value.identifier, fieldSearch) ||
+      matchesSearch(value.canonicalIdentifier, fieldSearch) ||
+      matchesSearch(value.shortCode, fieldSearch) ||
       matchesSearch(value.label, fieldSearch) ||
       matchesSearch(value.module, fieldSearch) ||
       matchesSearch(value.value, fieldSearch)
@@ -1699,6 +2256,14 @@ function filterDeviceOptionsBySearch(deviceOptions: DeviceSummary[], deviceSearc
   return filtered;
 }
 
+function filterDeviceOptionsByType(deviceOptions: DeviceSummary[], deviceType: "all" | "500" | "500PRO") {
+  if (deviceType === "all") {
+    return deviceOptions;
+  }
+
+  return deviceOptions.filter((device) => device.modelLabel === deviceType);
+}
+
 function selectMetricHistorySeries(
   samples: MetricSample[],
   metricId: string | null,
@@ -1712,10 +2277,13 @@ function selectMetricHistorySeries(
 
   const metricSamples = samples
     .filter((sample) => sample.identifier === metricId && typeof sample.value === "number")
-    .map((sample) => ({
-      timestamp: sample.timestamp,
-      value: sample.value as number,
-    }))
+    .map((sample) => {
+      const field = findFieldByIdentifier(sample.identifier);
+      return {
+        timestamp: sample.timestamp,
+        value: field ? scaleFieldNumericValue(field, sample.value as number) : (sample.value as number),
+      };
+    })
     .sort((left, right) => left.timestamp - right.timestamp);
 
   if (!metricSamples.length) {
@@ -1723,7 +2291,7 @@ function selectMetricHistorySeries(
   }
 
   const explicitRangeApplied = startTimestamp !== null || endTimestamp !== null;
-  return explicitRangeApplied
+  const filteredSamples = explicitRangeApplied
     ? metricSamples.filter((sample) => {
         if (startTimestamp !== null && sample.timestamp < startTimestamp) {
           return false;
@@ -1745,6 +2313,8 @@ function selectMetricHistorySeries(
         const cutoff = anchorTimestamp - hours * 60 * 60 * 1000;
         return metricSamples.filter((sample) => sample.timestamp >= cutoff);
       })();
+
+  return dedupeHistorySeries(filteredSamples);
 }
 
 function buildHistorySeries(
@@ -1768,6 +2338,279 @@ function formatValueByIdentifier(identifier: string, value: number | null) {
   }
 
   return formatMetricValue(field, value);
+}
+
+const BYTE_REVERSED_FAULT_IDENTIFIERS = new Set(["DF1", "DF2", "AF1", "AF2"]);
+const FAULT_SEVERITY_PRIORITY = new Map([
+  ["故障", 0],
+  ["告警", 1],
+  ["提示", 2],
+]);
+const faultDefinitionsByAlias = buildFaultDefinitionAliasMap();
+
+function normalizeNumericRawValue(value: CurrentMetricValue["rawValue"]) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim())) {
+    return Math.trunc(Number(value));
+  }
+
+  return null;
+}
+
+function toFaultBigInt(value: number) {
+  return BigInt.asUintN(32, BigInt(Math.trunc(value)));
+}
+
+function formatHexValue(value: bigint, minDigits: number) {
+  const hex = value.toString(16).toUpperCase();
+  return `0x${hex.padStart(minDigits, "0")}`;
+}
+
+function getFaultMask(identifier: string, identifierBit: number) {
+  const upperIdentifier = identifier.toUpperCase();
+
+  if (BYTE_REVERSED_FAULT_IDENTIFIERS.has(upperIdentifier)) {
+    const byteIndex = Math.floor((identifierBit - 1) / 8);
+    const bitInByte = (identifierBit - 1) % 8;
+    return 1n << BigInt((3 - byteIndex) * 8 + bitInByte);
+  }
+
+  return 1n << BigInt(identifierBit - 1);
+}
+
+function buildFaultDefinitionAliasMap() {
+  const map = new Map<string, FaultDefinition[]>();
+
+  for (const definition of faultDefinitions) {
+    if (!definition.identifier) {
+      continue;
+    }
+
+    const aliases = new Set([normalizeMetricKey(definition.identifier)]);
+    for (const field of findFieldsByIdentifier(definition.identifier)) {
+      aliases.add(normalizeMetricKey(field.identifier));
+      if (field.shortCode) {
+        aliases.add(normalizeMetricKey(field.shortCode));
+      }
+    }
+
+    for (const alias of aliases) {
+      map.set(alias, [...(map.get(alias) || []), definition]);
+    }
+  }
+
+  return map;
+}
+
+function getFaultDefinitionsForIdentifier(identifier: string) {
+  return faultDefinitionsByAlias.get(normalizeMetricKey(identifier)) || [];
+}
+
+function decodeFaultEntriesFromSource(source: {
+  identifier: string;
+  label: string;
+  dataType: string;
+  numericValue: number;
+}) {
+  const definitions = getFaultDefinitionsForIdentifier(source.identifier);
+  if (!definitions.length) {
+    return [] as DecodedFaultEntry[];
+  }
+
+  const rawValue = toFaultBigInt(source.numericValue);
+  const rawHexDigits = source.dataType === "UINT8" || source.dataType === "FAULT8" ? 2 : 8;
+
+  return definitions.flatMap<DecodedFaultEntry>((definition) => {
+    if (!definition.identifier || definition.identifierBit === null) {
+      return [];
+    }
+
+    const mask = getFaultMask(definition.identifier, definition.identifierBit);
+    if ((rawValue & mask) === 0n) {
+      return [];
+    }
+
+    return [
+      {
+        group: definition.group,
+        groupBit: definition.groupBit,
+        identifier: definition.identifier,
+        identifierBit: definition.identifierBit,
+        sourceIdentifier: source.identifier,
+        sourceLabel: source.label,
+        severity: definition.severity,
+        code: definition.code,
+        category: definition.category,
+        display: definition.display,
+        name: definition.name || definition.meaning,
+        meaning: definition.meaning,
+        description: definition.description,
+        nameEn: definition.nameEn,
+        rawValue: source.numericValue,
+        rawHex: formatHexValue(rawValue, rawHexDigits),
+        maskHex: formatHexValue(mask, 8),
+      },
+    ];
+  });
+}
+
+function sortDecodedFaults<T extends Pick<DecodedFaultEntry, "severity" | "groupBit" | "identifierBit"> & { timestamp?: number }>(entries: T[]) {
+  return [...entries].sort((left, right) => {
+    if (typeof left.timestamp === "number" && typeof right.timestamp === "number" && right.timestamp !== left.timestamp) {
+      return right.timestamp - left.timestamp;
+    }
+
+    const severityDelta = (FAULT_SEVERITY_PRIORITY.get(left.severity) ?? 9) - (FAULT_SEVERITY_PRIORITY.get(right.severity) ?? 9);
+    if (severityDelta !== 0) {
+      return severityDelta;
+    }
+
+    const groupDelta = (left.groupBit ?? 999) - (right.groupBit ?? 999);
+    if (groupDelta !== 0) {
+      return groupDelta;
+    }
+
+    return (left.identifierBit ?? 999) - (right.identifierBit ?? 999);
+  });
+}
+
+function dedupeDecodedFaults<T extends DecodedFaultEntry>(entries: T[]) {
+  const seen = new Set<string>();
+  const deduped: T[] = [];
+
+  for (const entry of entries) {
+    const key = [
+      entry.sourceIdentifier,
+      entry.identifier,
+      entry.identifierBit,
+      entry.code,
+      entry.rawHex,
+    ].join(":");
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(entry);
+  }
+
+  return deduped;
+}
+
+function decodeActiveFaults(currentValues: CurrentMetricValue[]) {
+  if (!faultDefinitions.length) {
+    return [] as DecodedFaultEntry[];
+  }
+
+  const decoded = currentValues.flatMap((entry) => {
+    const numericValue = normalizeNumericRawValue(entry.rawValue);
+    if (numericValue === null) {
+      return [];
+    }
+
+    return decodeFaultEntriesFromSource({
+      identifier: entry.identifier,
+      label: entry.label,
+      dataType: entry.dataType,
+      numericValue,
+    });
+  });
+
+  return sortDecodedFaults(dedupeDecodedFaults(decoded));
+}
+
+function selectFaultHistorySamples(
+  samples: MetricSample[],
+  hours: number,
+  startTimestamp: number | null,
+  endTimestamp: number | null,
+) {
+  const faultSamples = samples
+    .filter((sample) => typeof sample.value === "number" && getFaultDefinitionsForIdentifier(sample.identifier).length > 0)
+    .sort((left, right) => left.timestamp - right.timestamp);
+
+  if (!faultSamples.length) {
+    return [] as MetricSample[];
+  }
+
+  const explicitRangeApplied = startTimestamp !== null || endTimestamp !== null;
+  return explicitRangeApplied
+    ? faultSamples.filter((sample) => {
+        if (startTimestamp !== null && sample.timestamp < startTimestamp) {
+          return false;
+        }
+
+        if (endTimestamp !== null && sample.timestamp > endTimestamp) {
+          return false;
+        }
+
+        return true;
+      })
+    : (() => {
+        if (hours === 0) {
+          return faultSamples;
+        }
+
+        const latestAvailableTimestamp = faultSamples[faultSamples.length - 1]?.timestamp || Date.now();
+        const anchorTimestamp = latestAvailableTimestamp < Date.now() ? latestAvailableTimestamp : Date.now();
+        const cutoff = anchorTimestamp - hours * 60 * 60 * 1000;
+        return faultSamples.filter((sample) => sample.timestamp >= cutoff);
+      })();
+}
+
+function buildFaultHistoryEntries(
+  samples: MetricSample[],
+  hours: number,
+  startTimestamp: number | null,
+  endTimestamp: number | null,
+) {
+  const selectedSamples = selectFaultHistorySamples(samples, hours, startTimestamp, endTimestamp);
+  const seen = new Set<string>();
+  const entries: FaultHistoryEntry[] = [];
+
+  for (const sample of selectedSamples) {
+    const numericValue = normalizeNumericRawValue(sample.value);
+    if (numericValue === null) {
+      continue;
+    }
+
+    const field = findFieldByIdentifier(sample.identifier);
+    const sourceIdentifier = field?.identifier || sample.identifier;
+    const sourceLabel = field?.name || sample.identifier;
+    const sourceDataType = field?.dataType || "UINT32";
+
+    for (const entry of decodeFaultEntriesFromSource({
+      identifier: sourceIdentifier,
+      label: sourceLabel,
+      dataType: sourceDataType,
+      numericValue,
+    })) {
+      const key = [
+        sample.timestamp,
+        sample.sourceKey,
+        entry.sourceIdentifier,
+        entry.identifier,
+        entry.identifierBit,
+        entry.code,
+        entry.rawHex,
+      ].join(":");
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      entries.push({
+        ...entry,
+        timestamp: sample.timestamp,
+        sourceKey: sample.sourceKey,
+      });
+    }
+  }
+
+  return sortDecodedFaults(entries);
 }
 
 function buildRecentDailySummaries(samples: MetricSample[]) {
@@ -2011,6 +2854,7 @@ async function extractLiveData(
     maxObjectsToFetch?: number;
     includePayloadPreviews?: boolean;
     includeArtifacts?: boolean;
+    selectionStrategy?: "latest" | "balanced-by-day";
   },
 ) {
   const samples: MetricSample[] = [];
@@ -2020,9 +2864,14 @@ async function extractLiveData(
   const maxObjectsToFetch = options?.maxObjectsToFetch ?? FETCH_BUDGET;
   const includePayloadPreviews = options?.includePayloadPreviews ?? true;
   const includeArtifacts = options?.includeArtifacts ?? true;
+  const selectionStrategy = options?.selectionStrategy ?? "latest";
   const targetObjects = objects
     .filter((object) => {
       if (object.classification === "ota-binary" || object.classification === "other") {
+        return false;
+      }
+
+      if (!includeArtifacts && object.classification === "ota-manifest") {
         return false;
       }
 
@@ -2042,7 +2891,7 @@ async function extractLiveData(
       const rightPriority = isIotDataObject(right) ? 0 : isIotDataErrorObject(right) ? 1 : 2;
       return leftPriority - rightPriority || (getObjectEventTimestamp(right) || 0) - (getObjectEventTimestamp(left) || 0);
     });
-  const limitedObjects = targetObjects.slice(0, maxObjectsToFetch);
+  const limitedObjects = selectObjectsForParsing(targetObjects, maxObjectsToFetch, selectionStrategy);
 
   await forEachWithConcurrency(limitedObjects, OBJECT_FETCH_CONCURRENCY, async (object) => {
     try {
@@ -2200,6 +3049,286 @@ function describeS3Error(error: unknown) {
   return "The S3 request failed for this prefix.";
 }
 
+async function resolveSelectedDeviceObjects(
+  environment: PlatformEnvironment,
+  objects: PlatformObjectPreview[],
+  selectedDeviceId: string,
+  stats: QueryStats,
+  dataSourceMode: "s3" | "local" | "none",
+  datePrefixLimit: number,
+) {
+  let deviceObjects = objects.filter((object) => object.deviceId === selectedDeviceId);
+
+  if (dataSourceMode === "s3" && selectedDeviceId && environment.buckets.length && hasAwsCredentials()) {
+    const client = getS3Client(environment.region);
+    const expandedObjects = await listSelectedDeviceObjects(
+      client,
+      environment,
+      environment.buckets[0],
+      selectedDeviceId,
+      stats,
+      datePrefixLimit,
+    );
+
+    deviceObjects = dedupeObjects([
+      ...deviceObjects.filter((object) => !isDirectoryPreviewObject(object)),
+      ...expandedObjects,
+    ]);
+  }
+
+  return deviceObjects.sort((left, right) => (getObjectEventTimestamp(right) || 0) - (getObjectEventTimestamp(left) || 0));
+}
+
+async function extractOtaArtifacts(
+  environment: PlatformEnvironment,
+  objects: PlatformObjectPreview[],
+  stats: QueryStats,
+  selectedDeviceId: string | null,
+) {
+  const artifacts: OtaArtifact[] = [];
+  const client = hasAwsCredentials() && environment.buckets.length ? getS3Client(environment.region) : null;
+  const manifestObjects = objects
+    .filter((object) => object.classification === "ota-manifest")
+    .filter((object) => !selectedDeviceId || object.deviceId === selectedDeviceId || !object.deviceId)
+    .slice(0, 18);
+
+  await forEachWithConcurrency(manifestObjects, OBJECT_FETCH_CONCURRENCY, async (object) => {
+    try {
+      const textPayload = isLocalObject(object)
+        ? await fetchLocalObjectText(object, stats)
+        : client
+          ? await fetchObjectText(client, object, stats)
+          : null;
+      if (!textPayload) {
+        return;
+      }
+
+      stats.objectsParsed += 1;
+      const parsed = parseJsonLike(textPayload.text);
+      const payloadUnits = extractPayloadUnits(parsed);
+      for (const payloadUnit of payloadUnits) {
+        collectManifestArtifacts(object, payloadUnit.payload, artifacts);
+      }
+    } catch {
+      return;
+    }
+  });
+
+  const binaryArtifacts = objects
+    .filter((object) => object.classification === "ota-binary")
+    .filter((object) => !selectedDeviceId || object.deviceId === selectedDeviceId || object.bucket === sampleManifest.bucket)
+    .slice(0, 12)
+    .map((object) => ({
+      module: inferModuleFromKey(object.key),
+      kind: "binary" as const,
+      version: inferVersionFromText(object.key),
+      bucket: object.bucket,
+      key: object.key,
+      deviceId: object.deviceId,
+      size: object.size,
+      lastModified: object.lastModified,
+      url: object.url,
+    }));
+
+  return dedupeArtifacts([...artifacts, ...binaryArtifacts]);
+}
+
+export async function getDashboardListState(query: DashboardQuery): Promise<DashboardListState> {
+  const environments = getEnvironmentDefinitions();
+  const selectedEnvironment = getSelectedEnvironment(query, environments);
+  const deviceSearch = normalizeSearchTerm(query.deviceSearch);
+  const deviceType = normalizeListDeviceType(query.deviceType);
+  const pageSize = normalizePositiveInteger(query.pageSize, 10);
+  const stats = createQueryStats();
+  const notices: string[] = [];
+  const { objects, bucketStatuses, localRootDir, dataSourceMode } = await listRelevantObjects(selectedEnvironment, stats);
+  const deviceMetricCounts = await collectDeviceMetricCounts(selectedEnvironment, objects, stats);
+  const allDeviceOptions = collectDeviceSummaries(objects, [], deviceMetricCounts);
+  const filteredDeviceOptions = filterDeviceOptionsByType(filterDeviceOptionsBySearch(allDeviceOptions, deviceSearch, null), deviceType);
+  const totalItems = filteredDeviceOptions.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const page = Math.min(normalizePositiveInteger(query.page, 1), totalPages);
+  const pagedDeviceOptions = filteredDeviceOptions.slice((page - 1) * pageSize, page * pageSize);
+  const deniedBuckets = bucketStatuses.filter((bucket) => bucket.bucket !== "local-downloaded-files" && !bucket.accessible);
+
+  if (dataSourceMode === "s3") {
+    notices.push(`当前正在直连 S3：${selectedEnvironment.buckets.join(", ")}，首页仅加载设备列表与轻量状态。`);
+  } else if (dataSourceMode === "local" && localRootDir) {
+    notices.push(`当前实时 S3 没有返回可用数据，已切换到本地兜底目录：${localRootDir}`);
+  } else if (!hasAwsCredentials()) {
+    notices.push("当前没有 AWS 访问凭证，请先在 .env.local 中配置 Access Key。");
+  }
+
+  if (!selectedEnvironment.buckets.length && !localRootDir) {
+    notices.push("当前环境没有配置 S3 桶，也没有配置本地下载目录。");
+  }
+
+  if (!objects.length) {
+    notices.push("当前没有发现可处理的 iot-data 对象，请确认桶权限、前缀或时间范围。");
+  }
+
+  if (deniedBuckets.length > 0) {
+    notices.push(`当前 IAM Key 仍无法读取这些已配置桶：${deniedBuckets.map((bucket) => bucket.bucket).join(", ")}。`);
+  }
+
+  return {
+    environments,
+    selectedEnvironment,
+    dataSourceMode,
+    deviceSearch,
+    deviceType,
+    page,
+    pageSize,
+    totalItems,
+    totalPages,
+    deviceOptions: pagedDeviceOptions,
+    fleetSummary: buildDashboardFleetSummary(allDeviceOptions),
+    queryStats: stats,
+    configStatus: buildDashboardConfigStatus(selectedEnvironment, bucketStatuses, localRootDir),
+    notices,
+  };
+}
+
+export async function getSupportWorkbenchState(query: DashboardQuery): Promise<SupportWorkbenchState> {
+  const environments = getEnvironmentDefinitions();
+  const selectedEnvironment = getSelectedEnvironment(query, environments);
+  const stats = createQueryStats();
+  const notices: string[] = [];
+  const { objects, bucketStatuses, localRootDir, dataSourceMode } = await listRelevantObjects(selectedEnvironment, stats);
+  const deviceMetricCounts = await collectDeviceMetricCounts(selectedEnvironment, objects, stats);
+  const deviceOptions = collectDeviceSummaries(objects, [], deviceMetricCounts);
+  const deniedBuckets = bucketStatuses.filter((bucket) => bucket.bucket !== "local-downloaded-files" && !bucket.accessible);
+
+  if (dataSourceMode === "s3") {
+    notices.push(`当前正在直连 S3：${selectedEnvironment.buckets.join(", ")}，服务工具优先展示待跟进设备和快速诊断能力。`);
+  } else if (dataSourceMode === "local" && localRootDir) {
+    notices.push(`当前实时 S3 没有返回可用数据，已切换到本地兜底目录：${localRootDir}`);
+  } else if (!hasAwsCredentials()) {
+    notices.push("当前没有 AWS 访问凭证，请先在 .env.local 中配置 Access Key。");
+  }
+
+  if (!selectedEnvironment.buckets.length && !localRootDir) {
+    notices.push("当前环境没有配置 S3 桶，也没有配置本地下载目录。");
+  }
+
+  if (!objects.length) {
+    notices.push("当前没有发现可处理的 iot-data 对象，请确认桶权限、前缀或时间范围。");
+  }
+
+  if (deniedBuckets.length > 0) {
+    notices.push(`当前 IAM Key 仍无法读取这些已配置桶：${deniedBuckets.map((bucket) => bucket.bucket).join(", ")}。`);
+  }
+
+  return {
+    environments,
+    selectedEnvironment,
+    dataSourceMode,
+    summary: buildSupportWorkbenchSummary(deviceOptions),
+    followUpDevices: buildSupportFollowUpDevices(deviceOptions),
+    queryStats: stats,
+    configStatus: buildDashboardConfigStatus(selectedEnvironment, bucketStatuses, localRootDir),
+    notices,
+  };
+}
+
+export async function getDashboardDetailState(query: DashboardQuery): Promise<DashboardDetailState> {
+  const environments = getEnvironmentDefinitions();
+  const selectedEnvironment = getSelectedEnvironment(query, environments);
+  const selectedDeviceId = normalizeSearchTerm(query.deviceId) || null;
+  const startAt = normalizeSearchTerm(query.startAt);
+  const endAt = normalizeSearchTerm(query.endAt);
+  const startTimestamp = parseDateTimeInput(startAt);
+  const endTimestamp = parseDateTimeInput(endAt);
+  const historyWindowHours = DEFAULT_HISTORY_WINDOW_HOURS;
+  const selectedDeviceDateLimit = getSelectedDeviceDateLimit(
+    historyWindowHours,
+    startTimestamp,
+    endTimestamp,
+    RECENT_IOT_DATE_LIMIT,
+  );
+  const stats = createQueryStats(FETCH_BUDGET);
+  const notices: string[] = [];
+  const { objects, bucketStatuses, localRootDir, dataSourceMode } = await listRelevantObjects(selectedEnvironment, stats);
+
+  if (!selectedDeviceId) {
+    notices.push("当前没有选中的设备，请先从设备列表进入详情。");
+    return {
+      environments,
+      selectedEnvironment,
+      dataSourceMode,
+      selectedDeviceId: null,
+      selectedDevice: null,
+      selectedMetricId: null,
+      historyWindowHours,
+      currentValues: [],
+      decodedFaults: [],
+      historySeries: [],
+      metricOptions: [],
+      recentDailySummaries: [],
+      queryStats: stats,
+      configStatus: buildDashboardConfigStatus(selectedEnvironment, bucketStatuses, localRootDir),
+      notices,
+    };
+  }
+
+  const deviceObjects = await resolveSelectedDeviceObjects(
+    selectedEnvironment,
+    objects,
+    selectedDeviceId,
+    stats,
+    dataSourceMode,
+    selectedDeviceDateLimit,
+  );
+  stats.objectsDiscovered = deviceObjects.length;
+
+  const liveData = await extractLiveData(selectedEnvironment, selectedDeviceId, deviceObjects, stats, {
+    includeArtifacts: false,
+    includePayloadPreviews: false,
+    maxObjectsToFetch: FETCH_BUDGET,
+    selectionStrategy: "balanced-by-day",
+  });
+  const rangedSamples = filterSamplesByRange(liveData.samples, startTimestamp, endTimestamp);
+  const rawCurrentValues = buildCurrentValues(rangedSamples);
+  const currentValues = rawCurrentValues;
+  const decodedFaults = decodeActiveFaults(rawCurrentValues);
+  const selectedDevice = collectDeviceSummaries(deviceObjects, liveData.samples)[0] || null;
+  const recentDailySummaries = buildRecentDailySummaries(liveData.samples);
+
+  if (dataSourceMode === "s3") {
+    notices.push(`当前正在直连 S3：${selectedEnvironment.buckets.join(", ")}，详情仅按需加载当前设备。`);
+  } else if (dataSourceMode === "local" && localRootDir) {
+    notices.push(`当前实时 S3 没有返回可用数据，已切换到本地兜底目录：${localRootDir}`);
+  } else if (!hasAwsCredentials()) {
+    notices.push("当前没有 AWS 访问凭证，请先在 .env.local 中配置 Access Key。");
+  }
+
+  if (!deviceObjects.length) {
+    notices.push("当前设备在所选环境中没有发现可解析的对象。");
+  }
+
+  if (!rawCurrentValues.length) {
+    notices.push("当前还没有从 iot-data 样本中解析出设备字段，请确认对象正文里包含 state.reported 或物模型字段。");
+  }
+
+  return {
+    environments,
+    selectedEnvironment,
+    dataSourceMode,
+    selectedDeviceId,
+    selectedDevice,
+    selectedMetricId: null,
+    historyWindowHours,
+    currentValues,
+    decodedFaults,
+    historySeries: [],
+    metricOptions: [],
+    recentDailySummaries,
+    queryStats: stats,
+    configStatus: buildDashboardConfigStatus(selectedEnvironment, bucketStatuses, localRootDir),
+    notices,
+  };
+}
+
 export async function getDashboardState(query: DashboardQuery): Promise<DashboardState> {
   const environments = getEnvironmentDefinitions();
   const selectedEnvironment = getSelectedEnvironment(query, environments);
@@ -2209,7 +3338,8 @@ export async function getDashboardState(query: DashboardQuery): Promise<Dashboar
   const endAt = normalizeSearchTerm(query.endAt);
   const startTimestamp = parseDateTimeInput(startAt);
   const endTimestamp = parseDateTimeInput(endAt);
-  const historyWindowHours = query.hours === 0 || [6, 24, 72, 168].includes(query.hours || 0) ? (query.hours as number) : 24;
+  const historyWindowHours =
+    query.hours === 0 || [6, 24, 72, 168].includes(query.hours || 0) ? (query.hours as number) : DEFAULT_HISTORY_WINDOW_HOURS;
   const selectedDeviceDateLimit = getSelectedDeviceDateLimit(
     historyWindowHours,
     startTimestamp,
@@ -2231,7 +3361,7 @@ export async function getDashboardState(query: DashboardQuery): Promise<Dashboar
   const { objects, bucketStatuses, localRootDir, dataSourceMode } = await listRelevantObjects(selectedEnvironment, stats);
   const deviceMetricCounts = await collectDeviceMetricCounts(selectedEnvironment, objects, stats);
   const firstPassDevices = collectDeviceSummaries(objects, [], deviceMetricCounts);
-  const selectedDeviceId = query.deviceId || firstPassDevices[0]?.id || null;
+  const selectedDeviceId = normalizeSearchTerm(query.deviceId) || null;
   let effectiveObjects = objects;
 
   if (dataSourceMode === "s3" && selectedDeviceId && selectedEnvironment.buckets.length && hasAwsCredentials()) {
@@ -2253,29 +3383,41 @@ export async function getDashboardState(query: DashboardQuery): Promise<Dashboar
 
   stats.objectsDiscovered = effectiveObjects.length;
 
-  const liveData = await extractLiveData(selectedEnvironment, selectedDeviceId, effectiveObjects, stats, {
-    includeArtifacts: false,
-    includePayloadPreviews: false,
-    maxObjectsToFetch: FETCH_BUDGET,
-  });
-  const allDeviceOptions = collectDeviceSummaries(effectiveObjects, liveData.samples, deviceMetricCounts);
-  const selectedDevice = allDeviceOptions.find((device) => device.id === selectedDeviceId) || allDeviceOptions[0] || null;
-  const rangedSamples = filterSamplesByRange(liveData.samples, startTimestamp, endTimestamp);
-  const rangedPayloadPreviews = filterPayloadPreviewsByRange(liveData.payloadPreviews, startTimestamp, endTimestamp);
-  const rangedObjects = filterObjectsByRange(effectiveObjects, startTimestamp, endTimestamp).filter(
-    (object) => !isDirectoryPreviewObject(object),
-  );
-  const rawCurrentValues = buildCurrentValues(rangedSamples);
-  const currentValues = filterCurrentValuesBySearch(rawCurrentValues, fieldSearch);
-  const metricOptions = filterMetricOptionsBySearch(buildMetricOptions(rangedSamples), fieldSearch);
-  const selectedMetricId =
-    metricOptions.find((metric) => metric.identifier === query.metricId)?.identifier ||
-    metricOptions[0]?.identifier ||
-    null;
-  const historySeries = buildHistorySeries(rangedSamples, selectedMetricId, historyWindowHours, startTimestamp, endTimestamp);
-  const moduleCoverage = buildModuleCoverage(rawCurrentValues);
+  const liveData = selectedDeviceId
+    ? await extractLiveData(selectedEnvironment, selectedDeviceId, effectiveObjects, stats, {
+        includeArtifacts: false,
+        includePayloadPreviews: false,
+        maxObjectsToFetch: FETCH_BUDGET,
+      })
+    : {
+        samples: [] as MetricSample[],
+        artifacts: [] as OtaArtifact[],
+        payloadPreviews: [] as PayloadPreview[],
+      };
+  const allDeviceOptions = selectedDeviceId ? collectDeviceSummaries(effectiveObjects, liveData.samples, deviceMetricCounts) : firstPassDevices;
+  const selectedDevice = selectedDeviceId ? allDeviceOptions.find((device) => device.id === selectedDeviceId) || null : null;
+  const rangedSamples = selectedDeviceId ? filterSamplesByRange(liveData.samples, startTimestamp, endTimestamp) : ([] as MetricSample[]);
+  const rangedPayloadPreviews = selectedDeviceId
+    ? filterPayloadPreviewsByRange(liveData.payloadPreviews, startTimestamp, endTimestamp)
+    : ([] as PayloadPreview[]);
+  const rangedObjects = selectedDeviceId
+    ? filterObjectsByRange(effectiveObjects, startTimestamp, endTimestamp).filter((object) => !isDirectoryPreviewObject(object))
+    : ([] as PlatformObjectPreview[]);
+  const rawCurrentValues = selectedDeviceId ? buildCurrentValues(rangedSamples) : ([] as CurrentMetricValue[]);
+  const currentValues = selectedDeviceId ? filterCurrentValuesBySearch(rawCurrentValues, fieldSearch) : ([] as CurrentMetricValue[]);
+  const decodedFaults = selectedDeviceId ? decodeActiveFaults(rawCurrentValues) : ([] as DecodedFaultEntry[]);
+  const metricOptions = selectedDeviceId
+    ? filterMetricOptionsBySearch(buildMetricOptions(rangedSamples), fieldSearch)
+    : ([] as Array<{ identifier: string; label: string }>);
+  const selectedMetricId = selectedDeviceId
+    ? metricOptions.find((metric) => metric.identifier === query.metricId)?.identifier || metricOptions[0]?.identifier || null
+    : null;
+  const historySeries = selectedDeviceId
+    ? buildHistorySeries(rangedSamples, selectedMetricId, historyWindowHours, startTimestamp, endTimestamp)
+    : ([] as MetricHistoryPoint[]);
+  const moduleCoverage = selectedDeviceId ? buildModuleCoverage(rawCurrentValues) : ([] as ModuleCoverage[]);
   const deviceOptions = filterDeviceOptionsBySearch(allDeviceOptions, deviceSearch, selectedDevice?.id || selectedDeviceId);
-  const recentDailySummaries = buildRecentDailySummaries(liveData.samples);
+  const recentDailySummaries = selectedDeviceId ? buildRecentDailySummaries(liveData.samples) : [];
   const latestCurrentValueTimestamp = rawCurrentValues.reduce<number | null>((latest, item) => {
     if (!item.timestamp) {
       return latest;
@@ -2316,15 +3458,15 @@ export async function getDashboardState(query: DashboardQuery): Promise<Dashboar
     notices.push("当前没有发现可处理的 iot-data 对象，请确认桶权限、前缀或时间范围。");
   }
 
-  if (!rawCurrentValues.length) {
+  if (selectedDeviceId && !rawCurrentValues.length) {
     notices.push("当前还没有从 iot-data 样本中解析出设备字段，请确认对象正文里包含 state.reported 或物模型字段。");
   }
 
-  if ((startTimestamp !== null || endTimestamp !== null) && !rangedSamples.length) {
+  if (selectedDeviceId && (startTimestamp !== null || endTimestamp !== null) && !rangedSamples.length) {
     notices.push("当前时间范围内没有匹配到已解析的遥测样本。");
   }
 
-  if (fieldSearch && !currentValues.length) {
+  if (selectedDeviceId && fieldSearch && !currentValues.length) {
     notices.push("当前字段搜索没有匹配到任何已解析字段。");
   }
 
@@ -2344,7 +3486,11 @@ export async function getDashboardState(query: DashboardQuery): Promise<Dashboar
     notices.push("本地目录已配置，但当前没有命中任何可识别的 iot-data 文件。");
   }
 
-  const otaArtifacts = liveData.artifacts.length ? liveData.artifacts : createSampleArtifacts(selectedEnvironment);
+  const otaArtifacts = selectedDeviceId
+    ? liveData.artifacts.length
+      ? liveData.artifacts
+      : createSampleArtifacts(selectedEnvironment)
+    : [];
 
   return {
     environments,
@@ -2360,14 +3506,15 @@ export async function getDashboardState(query: DashboardQuery): Promise<Dashboar
     deviceOptions,
     selectedDevice,
     currentValues,
+    decodedFaults,
     historySeries,
     metricOptions,
     otaArtifacts,
-    recentObjects: rangedObjects.slice(0, 14),
+    recentObjects: selectedDeviceId ? rangedObjects.slice(0, 14) : [],
     moduleCoverage,
     bucketStatuses,
-    ingestionLanes: buildIngestionLanes(rangedObjects),
-    payloadPreviews: rangedPayloadPreviews,
+    ingestionLanes: selectedDeviceId ? buildIngestionLanes(rangedObjects) : [],
+    payloadPreviews: selectedDeviceId ? rangedPayloadPreviews : [],
     recentDailySummaries,
     queryStats: stats,
     configStatus: {
@@ -2386,13 +3533,16 @@ export async function getDashboardHistoryState(query: DashboardQuery): Promise<D
   const endAt = normalizeSearchTerm(query.endAt);
   const startTimestamp = parseDateTimeInput(startAt);
   const endTimestamp = parseDateTimeInput(endAt);
-  const historyWindowHours = query.hours === 0 || [6, 24, 72, 168].includes(query.hours || 0) ? (query.hours as number) : 24;
+  const explicitRangeApplied = startTimestamp !== null || endTimestamp !== null;
+  const historyWindowHours =
+    query.hours === 0 || [6, 24, 72, 168].includes(query.hours || 0) ? (query.hours as number) : DEFAULT_HISTORY_WINDOW_HOURS;
   const selectedDeviceDateLimit = getSelectedDeviceDateLimit(
     historyWindowHours,
     startTimestamp,
     endTimestamp,
     HISTORY_FULL_CYCLE_DATE_LIMIT,
   );
+  const historyObjectFetchLimit = getHistoryObjectFetchLimit(selectedDeviceDateLimit);
   const stats: QueryStats = {
     listRequests: 0,
     objectFetches: 0,
@@ -2401,7 +3551,95 @@ export async function getDashboardHistoryState(query: DashboardQuery): Promise<D
     bytesFetched: 0,
     cacheHits: 0,
     listBudget: LIST_BUDGET,
-    fetchBudget: HISTORY_FETCH_BUDGET,
+    fetchBudget: historyObjectFetchLimit,
+  };
+  const notices: string[] = [];
+  const { objects, dataSourceMode } = await listRelevantObjects(selectedEnvironment, stats);
+  const firstPassDevices = collectDeviceSummaries(objects, []);
+  const selectedDeviceId = query.deviceId || firstPassDevices[0]?.id || null;
+  let effectiveObjects = objects;
+
+  if (dataSourceMode === "s3" && selectedDeviceId && selectedEnvironment.buckets.length && hasAwsCredentials()) {
+    const client = getS3Client(selectedEnvironment.region);
+    const perDayObjectLimit = explicitRangeApplied || historyWindowHours === 0 ? null : HISTORY_SELECTED_DEVICE_OBJECTS_PER_DAY;
+    const expandedObjects = await listSelectedDeviceObjects(
+      client,
+      selectedEnvironment,
+      selectedEnvironment.buckets[0],
+      selectedDeviceId,
+      stats,
+      selectedDeviceDateLimit,
+      perDayObjectLimit,
+    );
+
+    effectiveObjects = dedupeObjects([
+      ...objects.filter((object) => !(isDirectoryPreviewObject(object) && object.deviceId === selectedDeviceId)),
+      ...expandedObjects,
+    ]).sort((left, right) => (getObjectEventTimestamp(right) || 0) - (getObjectEventTimestamp(left) || 0));
+  }
+
+  stats.objectsDiscovered = effectiveObjects.length;
+
+  const liveData = await extractLiveData(selectedEnvironment, selectedDeviceId, effectiveObjects, stats, {
+    includeArtifacts: false,
+    includePayloadPreviews: false,
+    maxObjectsToFetch: historyObjectFetchLimit,
+    selectionStrategy: selectedDeviceDateLimit > 2 ? "balanced-by-day" : "latest",
+  });
+  const rangedSamples = filterSamplesByRange(liveData.samples, startTimestamp, endTimestamp);
+  const metricOptions = buildMetricOptions(rangedSamples);
+  const selectedMetricId =
+    metricOptions.find((metric) => metric.identifier === query.metricId)?.identifier ||
+    metricOptions[0]?.identifier ||
+    null;
+  const rawHistorySeries = selectMetricHistorySeries(rangedSamples, selectedMetricId, historyWindowHours, startTimestamp, endTimestamp);
+  const historySeries = compressSeries(rawHistorySeries);
+
+  if (!selectedDeviceId) {
+    notices.push("当前没有可查看曲线的设备。");
+  }
+
+  if (!historySeries.length) {
+    notices.push("当前时间范围内没有匹配到可绘制曲线的历史点。");
+  }
+
+  return {
+    selectedEnvironment,
+    dataSourceMode,
+    selectedDeviceId,
+    selectedMetricId,
+    historySeries,
+    rawHistorySeries,
+    metricOptions,
+    queryStats: stats,
+    notices,
+  };
+}
+
+export async function getDashboardFaultHistoryState(query: DashboardQuery): Promise<DashboardFaultHistoryState> {
+  const environments = getEnvironmentDefinitions();
+  const selectedEnvironment = getSelectedEnvironment(query, environments);
+  const startAt = normalizeSearchTerm(query.startAt);
+  const endAt = normalizeSearchTerm(query.endAt);
+  const startTimestamp = parseDateTimeInput(startAt);
+  const endTimestamp = parseDateTimeInput(endAt);
+  const historyWindowHours = query.hours === 0 || [6, 24, 72, 168].includes(query.hours || 0) ? (query.hours as number) : 72;
+  const selectedDeviceDateLimit = getSelectedDeviceDateLimit(
+    historyWindowHours,
+    startTimestamp,
+    endTimestamp,
+    HISTORY_FULL_CYCLE_DATE_LIMIT,
+  );
+  const historyObjectFetchLimit = getHistoryObjectFetchLimit(selectedDeviceDateLimit);
+  const stats: QueryStats = {
+    listRequests: 0,
+    objectFetches: 0,
+    objectsDiscovered: 0,
+    objectsParsed: 0,
+    bytesFetched: 0,
+    cacheHits: 0,
+    listBudget: LIST_BUDGET,
+    fetchBudget: historyObjectFetchLimit,
   };
   const notices: string[] = [];
   const { objects, dataSourceMode } = await listRelevantObjects(selectedEnvironment, stats);
@@ -2431,33 +3669,27 @@ export async function getDashboardHistoryState(query: DashboardQuery): Promise<D
   const liveData = await extractLiveData(selectedEnvironment, selectedDeviceId, effectiveObjects, stats, {
     includeArtifacts: false,
     includePayloadPreviews: false,
-    maxObjectsToFetch: HISTORY_FETCH_BUDGET,
+    maxObjectsToFetch: historyObjectFetchLimit,
+    selectionStrategy: selectedDeviceDateLimit > 2 ? "balanced-by-day" : "latest",
   });
-  const rangedSamples = filterSamplesByRange(liveData.samples, startTimestamp, endTimestamp);
-  const metricOptions = buildMetricOptions(rangedSamples);
-  const selectedMetricId =
-    metricOptions.find((metric) => metric.identifier === query.metricId)?.identifier ||
-    metricOptions[0]?.identifier ||
-    null;
-  const rawHistorySeries = selectMetricHistorySeries(rangedSamples, selectedMetricId, historyWindowHours, startTimestamp, endTimestamp);
-  const historySeries = compressSeries(rawHistorySeries);
+  const faultHistory = buildFaultHistoryEntries(liveData.samples, historyWindowHours, startTimestamp, endTimestamp);
 
   if (!selectedDeviceId) {
-    notices.push("当前没有可查看曲线的设备。");
+    notices.push("当前没有可查看故障历史的设备。");
   }
 
-  if (!historySeries.length) {
-    notices.push("当前时间范围内没有匹配到可绘制曲线的历史点。");
+  if (!faultHistory.length) {
+    notices.push("当前时间范围内没有匹配到故障历史。");
   }
 
   return {
     selectedEnvironment,
     dataSourceMode,
     selectedDeviceId,
-    selectedMetricId,
-    historySeries,
-    rawHistorySeries,
-    metricOptions,
+    historyWindowHours,
+    startAt,
+    endAt,
+    faultHistory,
     queryStats: stats,
     notices,
   };

@@ -4,6 +4,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDashboardHistoryState } from "@/lib/iot-platform";
 
 function parseHours(value: string | null) {
+  if (value === null || value.trim() === "") {
+    return undefined;
+  }
+
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }

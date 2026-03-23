@@ -1,0 +1,870 @@
+:root {
+  color-scheme: light;
+}
+
+.page {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 28px auto 56px;
+  display: grid;
+  gap: 20px;
+}
+
+.pageWide {
+  width: min(1320px, calc(100vw - 32px));
+}
+
+.hero {
+  display: grid;
+  gap: 18px;
+  padding: 24px 28px;
+  border-radius: 30px;
+  border: 1px solid rgba(118, 152, 198, 0.18);
+  background:
+    radial-gradient(circle at top left, rgba(57, 120, 255, 0.18), transparent 28%),
+    radial-gradient(circle at right bottom, rgba(59, 168, 157, 0.16), transparent 24%),
+    linear-gradient(180deg, rgba(12, 30, 55, 0.98), rgba(15, 42, 73, 0.92));
+  color: #f6fbff;
+  box-shadow: 0 20px 48px rgba(8, 21, 38, 0.18);
+}
+
+.heroTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.heroMain {
+  display: grid;
+  gap: 10px;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.1rem);
+  line-height: 0.95;
+}
+
+.heroCopy {
+  margin: 0;
+  max-width: 760px;
+  color: rgba(228, 237, 248, 0.82);
+}
+
+.heroActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(199, 217, 238, 0.88);
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.modeChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.modeChipLive {
+  background: rgba(64, 193, 171, 0.18);
+  color: #bff7ea;
+}
+
+.modeChipMuted {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6eef8;
+}
+
+.chipGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.chipCard {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(205, 220, 240, 0.14);
+  backdrop-filter: blur(8px);
+}
+
+.chipLabel {
+  color: rgba(212, 225, 242, 0.72);
+  font-size: 0.88rem;
+}
+
+.chipValue {
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.chipHint {
+  color: rgba(220, 231, 244, 0.72);
+  font-size: 0.88rem;
+}
+
+.section {
+  display: grid;
+  gap: 16px;
+  padding: 22px 24px;
+  border-radius: 28px;
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 38px rgba(13, 32, 54, 0.08);
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1.4rem;
+  color: #10253f;
+}
+
+.sectionKicker {
+  color: #667f9c;
+  font-size: 0.92rem;
+}
+
+.sectionCopy {
+  margin: 4px 0 0;
+  color: #61748f;
+}
+
+.toolbar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.filterRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(102, 127, 156, 0.2);
+  background: rgba(246, 249, 253, 0.98);
+  color: #10253f;
+  padding: 14px 16px;
+  font: inherit;
+}
+
+.textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.fieldLabel {
+  display: grid;
+  gap: 8px;
+  color: #51667f;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.toggleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  background: rgba(247, 250, 253, 0.9);
+  color: #51667f;
+}
+
+.inlineActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tableWrap {
+  overflow: auto;
+  border-radius: 22px;
+  border: 1px solid rgba(17, 41, 69, 0.07);
+  background: linear-gradient(180deg, rgba(252, 253, 255, 0.96), rgba(246, 249, 253, 0.98));
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.table th,
+.table td {
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(17, 41, 69, 0.07);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  font-size: 0.92rem;
+  color: #4f6481;
+  font-weight: 700;
+  background: rgba(245, 248, 252, 0.92);
+}
+
+.table td {
+  color: #10253f;
+}
+
+.tableStrong {
+  display: block;
+  font-weight: 700;
+}
+
+.tableSubtle {
+  display: block;
+  margin-top: 4px;
+  color: #6c819c;
+}
+
+.tableActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tableAction {
+  border: none;
+  background: none;
+  color: #2d5fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.emptyState {
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px dashed rgba(102, 127, 156, 0.26);
+  background: rgba(247, 250, 253, 0.92);
+  color: #5c6f89;
+  text-align: center;
+}
+
+.notice {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(197, 141, 51, 0.24);
+  background: rgba(255, 247, 233, 0.9);
+  color: #7b5a18;
+}
+
+.noticeStack {
+  display: grid;
+  gap: 10px;
+}
+
+.detailLayout {
+  display: grid;
+  gap: 20px;
+}
+
+.detailSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.metricCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.metricCardButton {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(45, 95, 255, 0.12), transparent 38%),
+    linear-gradient(180deg, rgba(248, 251, 255, 0.98), rgba(241, 247, 252, 0.92));
+  color: #10253f;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.metricCardButton:hover {
+  transform: translateY(-2px);
+  border-color: rgba(45, 95, 255, 0.22);
+  box-shadow: 0 16px 28px rgba(13, 32, 54, 0.08);
+}
+
+.metricCardButton span,
+.metricCardButton em {
+  color: #637894;
+  font-style: normal;
+}
+
+.metricCardButton strong {
+  font-size: 1.12rem;
+  color: #10253f;
+}
+
+.metricCardDisabled {
+  opacity: 0.68;
+  cursor: not-allowed;
+}
+
+.metricCardDisabled:hover {
+  transform: none;
+  border-color: rgba(17, 41, 69, 0.08);
+  box-shadow: none;
+}
+
+.detailSummaryCard {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(61, 118, 255, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(248, 251, 255, 0.98), rgba(241, 247, 252, 0.92));
+  border: 1px solid rgba(17, 41, 69, 0.08);
+}
+
+.detailSummaryCard strong {
+  color: #10253f;
+  font-size: 1.05rem;
+}
+
+.detailSummaryCard span,
+.detailSummaryCard em {
+  color: #637894;
+  font-style: normal;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.9fr);
+  gap: 20px;
+}
+
+.stack {
+  display: grid;
+  gap: 20px;
+}
+
+.faultList {
+  display: grid;
+  gap: 12px;
+}
+
+.faultItem {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  background: rgba(248, 250, 253, 0.96);
+}
+
+.faultRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.faultBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.faultCritical {
+  background: rgba(201, 78, 65, 0.14);
+  color: #a13629;
+}
+
+.faultWarning {
+  background: rgba(212, 152, 60, 0.16);
+  color: #9b6904;
+}
+
+.faultNotice {
+  background: rgba(65, 124, 201, 0.14);
+  color: #1e568e;
+}
+
+.faultDefault {
+  background: rgba(106, 123, 145, 0.14);
+  color: #4e5d71;
+}
+
+.miniGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.miniCard {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(248, 250, 253, 0.94);
+  border: 1px solid rgba(17, 41, 69, 0.08);
+}
+
+.miniCard strong {
+  color: #10253f;
+}
+
+.overviewShell {
+  display: grid;
+  gap: 10px;
+}
+
+.overviewHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #61748f;
+  font-size: 0.92rem;
+}
+
+.overviewChart {
+  border-radius: 16px;
+  background: rgba(245, 248, 252, 0.92);
+}
+
+.historyChartShell {
+  position: relative;
+}
+
+.overviewLine {
+  stroke: rgba(69, 112, 255, 0.8);
+  stroke-width: 2;
+  fill: none;
+}
+
+.overviewSelection {
+  fill: rgba(45, 95, 255, 0.14);
+  stroke: rgba(45, 95, 255, 0.72);
+  stroke-width: 1.4;
+}
+
+.overviewHandle {
+  fill: rgba(12, 30, 55, 0.86);
+}
+
+.historyHoverLine {
+  stroke: rgba(12, 30, 55, 0.28);
+  stroke-width: 1.4;
+  stroke-dasharray: 6 6;
+}
+
+.historyChartTooltip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 14px));
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(12, 30, 55, 0.96);
+  color: #f4f8fd;
+  pointer-events: none;
+  box-shadow: 0 18px 30px rgba(8, 21, 38, 0.22);
+}
+
+.historyChartTooltip strong {
+  font-size: 0.95rem;
+}
+
+.historyChartTooltip span {
+  font-size: 0.8rem;
+  color: rgba(226, 236, 247, 0.82);
+}
+
+.chartPlaceholder {
+  padding: 28px;
+  border-radius: 22px;
+  border: 1px dashed rgba(102, 127, 156, 0.26);
+  background: rgba(247, 250, 253, 0.9);
+  color: #5c6f89;
+  text-align: center;
+}
+
+.propertyToolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tabRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tabButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(102, 127, 156, 0.18);
+  background: rgba(246, 249, 253, 0.98);
+  color: #10253f;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tabButton span {
+  color: #556b85;
+}
+
+.tabButton strong {
+  color: #10253f;
+  font-size: 0.9rem;
+}
+
+.tabButtonActive {
+  border-color: rgba(45, 95, 255, 0.26);
+  background: rgba(45, 95, 255, 0.1);
+}
+
+.pagination {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.paginationButton {
+  border: 1px solid rgba(102, 127, 156, 0.18);
+  background: rgba(246, 249, 253, 0.98);
+  color: #10253f;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.paginationButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.details {
+  border-radius: 20px;
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  background: rgba(251, 252, 254, 0.95);
+  overflow: hidden;
+}
+
+.details summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 18px;
+  font-weight: 700;
+  color: #10253f;
+}
+
+.details summary::-webkit-details-marker {
+  display: none;
+}
+
+.detailsBody {
+  padding: 0 18px 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.metricChipRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.metricChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  background: rgba(246, 249, 253, 0.98);
+  color: #10253f;
+  font: inherit;
+  cursor: pointer;
+}
+
+.metricChip strong {
+  color: #5b6f8a;
+  font-size: 0.82rem;
+}
+
+.metricChipDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.comparisonPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.comparisonLegend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.comparisonLegendCard {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  background: rgba(248, 250, 253, 0.96);
+  color: #586d87;
+}
+
+.comparisonLegendHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #10253f;
+}
+
+.comparisonChart {
+  border-radius: 18px;
+  background: rgba(245, 248, 252, 0.92);
+}
+
+.comparisonGridLine {
+  stroke: rgba(108, 129, 156, 0.18);
+  stroke-width: 1;
+}
+
+.comparisonAxis {
+  stroke: rgba(108, 129, 156, 0.28);
+  stroke-width: 1;
+}
+
+.comparisonTooltip {
+  position: absolute;
+  top: 14px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(12, 30, 55, 0.96);
+  color: #f4f8fd;
+  pointer-events: none;
+  box-shadow: 0 18px 30px rgba(8, 21, 38, 0.22);
+}
+
+.comparisonTooltipRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.debugGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.debugCard {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(246, 249, 253, 0.98);
+  border: 1px solid rgba(17, 41, 69, 0.08);
+}
+
+.supportNote {
+  margin: 0;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  background: rgba(246, 249, 253, 0.96);
+  color: #10253f;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  padding: 24px;
+  background: rgba(8, 21, 38, 0.52);
+  display: grid;
+  place-items: center;
+}
+
+.modalCard {
+  width: min(1080px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 28px 64px rgba(8, 21, 38, 0.28);
+  border: 1px solid rgba(17, 41, 69, 0.08);
+  padding: 22px 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.closeButton {
+  border: none;
+  background: rgba(17, 41, 69, 0.06);
+  color: #10253f;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.skeletonHero,
+.skeletonCard,
+.skeletonLine {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeletonHero::after,
+.skeletonCard::after,
+.skeletonLine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  animation: pulse-slide 1.4s ease-in-out infinite;
+}
+
+.skeletonHero {
+  min-height: 210px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(13, 32, 54, 0.94), rgba(21, 48, 79, 0.92));
+}
+
+.skeletonCard {
+  min-height: 92px;
+  border-radius: 22px;
+  background: rgba(235, 240, 246, 0.88);
+}
+
+.skeletonLine {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(229, 236, 243, 0.92);
+}
+
+.skeletonTable {
+  display: grid;
+  gap: 10px;
+}
+
+@keyframes pulse-slide {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 900px) {
+  .filterRow,
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .heroTop,
+  .sectionHeader,
+  .toolbar,
+  .propertyToolbar,
+  .overviewHeader,
+  .modalHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page,
+  .pageWide {
+    width: min(100vw - 20px, 100%);
+    margin: 20px auto 40px;
+  }
+
+  .metricCardGrid,
+  .detailSummaryGrid,
+  .comparisonLegend {
+    grid-template-columns: 1fr;
+  }
+}

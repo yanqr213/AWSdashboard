@@ -1,6 +1,9 @@
-import { DashboardClient } from "@/app/dashboard-client";
+import { Suspense } from "react";
+
+import { DashboardListClient } from "@/app/dashboard/list-client";
+import { DashboardListSkeleton } from "@/app/dashboard/loading-shell";
 import { requireAuthenticatedUser } from "@/lib/auth";
-import { getDashboardState } from "@/lib/iot-platform";
+import { getDashboardListState } from "@/lib/iot-platform";
 
 export const dynamic = "force-dynamic";
 
@@ -10,24 +13,25 @@ function readParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function parseHours(value: string | undefined) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+async function DashboardListContent({ searchParams }: { searchParams?: SearchParams }) {
+  const params = searchParams ? await searchParams : {};
+  const initialState = await getDashboardListState({
+    environment: readParam(params.environment),
+    deviceSearch: readParam(params.deviceSearch),
+    deviceType: readParam(params.deviceType),
+    page: Number(readParam(params.page) || 1),
+    pageSize: Number(readParam(params.pageSize) || 10),
+  });
+
+  return <DashboardListClient initialState={initialState} />;
 }
 
 export default async function Home({ searchParams }: { searchParams?: SearchParams }) {
   await requireAuthenticatedUser();
-  const params = searchParams ? await searchParams : {};
-  const initialState = await getDashboardState({
-    environment: readParam(params.environment),
-    deviceId: readParam(params.deviceId),
-    metricId: readParam(params.metricId),
-    deviceSearch: readParam(params.deviceSearch),
-    fieldSearch: readParam(params.fieldSearch),
-    startAt: readParam(params.startAt),
-    endAt: readParam(params.endAt),
-    hours: parseHours(readParam(params.hours)),
-  });
 
-  return <DashboardClient initialState={initialState} />;
+  return (
+    <Suspense fallback={<DashboardListSkeleton />}>
+      <DashboardListContent searchParams={searchParams} />
+    </Suspense>
+  );
 }

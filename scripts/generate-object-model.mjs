@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 const workspaceRoot = path.resolve(__dirname, "..");
 const defaultInput = "D:\\download\\物模型_2026_1_6(1).xlsx";
 const inputPath = process.argv[2] || process.env.OBJECT_MODEL_XLSX_PATH || defaultInput;
+const faultInputPath = process.env.FAULT_CODE_XLSX_PATH || "";
 const outputPath =
   process.argv[3] || path.join(workspaceRoot, "lib", "generated", "object-model.generated.ts");
 
@@ -267,7 +268,58 @@ function createObjectModel(rows) {
   };
 }
 
-function createFaultModel(rows) {
+function mergeObjectModelField(primaryField, fallbackField) {
+  return {
+    module: primaryField.module || fallbackField.module,
+    functionId: primaryField.functionId || fallbackField.functionId,
+    name: primaryField.name || fallbackField.name,
+    identifier: primaryField.identifier || fallbackField.identifier,
+    shortCode: primaryField.shortCode || fallbackField.shortCode,
+    functionType: primaryField.functionType || fallbackField.functionType,
+    access: primaryField.access || fallbackField.access,
+    dataType: primaryField.dataType || fallbackField.dataType,
+    description: primaryField.description || fallbackField.description,
+    step: primaryField.step ?? fallbackField.step,
+    min: primaryField.min ?? fallbackField.min,
+    max: primaryField.max ?? fallbackField.max,
+    unit: primaryField.unit || fallbackField.unit,
+    multiplier: primaryField.multiplier ?? fallbackField.multiplier,
+    enumOptions: primaryField.enumOptions.length ? primaryField.enumOptions : fallbackField.enumOptions,
+    textLength: primaryField.textLength ?? fallbackField.textLength,
+    reportMode: primaryField.reportMode || fallbackField.reportMode,
+    threshold: primaryField.threshold ?? fallbackField.threshold,
+  };
+}
+
+function mergeObjectModels(models) {
+  const fieldsByIdentifier = new Map();
+
+  for (const model of models) {
+    for (const field of model.fields) {
+      const existing = fieldsByIdentifier.get(field.identifier);
+      fieldsByIdentifier.set(field.identifier, existing ? mergeObjectModelField(existing, field) : field);
+    }
+  }
+
+  const mergedFields = [...fieldsByIdentifier.values()].sort((left, right) => {
+    return left.module.localeCompare(right.module) || Number(left.functionId) - Number(right.functionId);
+  });
+  const modules = new Map();
+
+  for (const field of mergedFields) {
+    modules.set(field.module, (modules.get(field.module) || 0) + 1);
+  }
+
+  return {
+    fields: mergedFields,
+    modules: [...modules.entries()].map(([module, count]) => ({
+      module,
+      count,
+    })),
+  };
+}
+
+function createLegacyFaultModel(rows) {
   if (!rows.length) {
     return [];
   }
@@ -289,16 +341,69 @@ function createFaultModel(rows) {
 
     faults.push({
       group: currentGroup,
-      bit,
+      groupBit: toNullableNumber(bit),
+      identifier: "",
+      identifierBit: null,
       meaning,
       severity: row[8] || "",
-      notes: row[10] || "",
-      updatedAt: row[12] || "",
-      changeNotes: row[13] || "",
+      code: "",
+      display: "",
+      category: "",
+      name: "",
+      description: row[10] || "",
+      nameEn: "",
     });
   }
 
   return faults;
+}
+
+function createEnhancedFaultModel(rows) {
+  if (rows.length <= 1) {
+    return [];
+  }
+
+  const faults = [];
+  let currentGroup = "";
+
+  for (const row of rows.slice(1)) {
+    if (row[0]) {
+      currentGroup = row[0];
+    }
+
+    const group = row[0] || currentGroup;
+    const groupBit = toNullableNumber(row[1]);
+    const identifier = normalizeIdentifier(row[2] || "");
+    const identifierBit = toNullableNumber(row[3]);
+    const meaning = row[4] || "";
+
+    if (!group || groupBit === null || !identifier || identifierBit === null || !meaning) {
+      continue;
+    }
+
+    faults.push({
+      group,
+      groupBit,
+      identifier,
+      identifierBit,
+      meaning,
+      severity: row[5] || "",
+      code: row[6] || "",
+      display: row[7] || "",
+      category: row[8] || "",
+      name: row[9] || "",
+      description: row[10] || "",
+      nameEn: row[11] || "",
+    });
+  }
+
+  return faults;
+}
+
+function createFaultModel(rows) {
+  const header = rows[0] || [];
+  const hasEnhancedColumns = header.includes("物模型标识") && header.includes("物模型故障位");
+  return hasEnhancedColumns ? createEnhancedFaultModel(rows) : createLegacyFaultModel(rows);
 }
 
 function renderOutput(payload) {
@@ -333,12 +438,17 @@ export type GeneratedObjectModelField = {
 
 export type GeneratedFaultDefinition = {
   group: string;
-  bit: string;
+  groupBit: number | null;
+  identifier: string;
+  identifierBit: number | null;
   meaning: string;
   severity: string;
-  notes: string;
-  updatedAt: string;
-  changeNotes: string;
+  code: string;
+  display: string;
+  category: string;
+  name: string;
+  description: string;
+  nameEn: string;
 };
 
 export const generatedObjectModel = ${toAsciiJson(payload.objectModel)} as const satisfies {
@@ -354,20 +464,33 @@ function main() {
   const entries = loadZipEntries(inputPath);
   const sharedStrings = getSharedStrings(entries);
   const sheets = getSheets(entries);
-  const summarySheet =
-    sheets.find((sheet) => sheet.name === "各模块汇总数据草稿") ||
-    sheets.find((sheet) => sheet.name === "物模型文档") ||
-    sheets[0];
+  const objectModelSheets = [
+    sheets.find((sheet) => sheet.name === "各模块汇总数据草稿"),
+    sheets.find((sheet) => sheet.name === "物模型文档"),
+  ].filter((sheet, index, allSheets) => Boolean(sheet?.path) && allSheets.findIndex((item) => item?.path === sheet?.path) === index);
+  const summarySheet = objectModelSheets[0] || sheets[0];
   const faultSheet = sheets.find((sheet) => sheet.name === "故障码定义");
 
   if (!summarySheet?.path) {
     throw new Error("Expected workbook sheets were not found.");
   }
 
-  const objectModelRows = readSheetRows(entries, summarySheet.path, sharedStrings);
-  const faultRows = faultSheet?.path ? readSheetRows(entries, faultSheet.path, sharedStrings) : [];
+  const objectModelModels = (objectModelSheets.length ? objectModelSheets : [summarySheet]).map((sheet) =>
+    createObjectModel(readSheetRows(entries, sheet.path, sharedStrings)),
+  );
+  const faultRows = faultInputPath
+    ? (() => {
+        const faultEntries = loadZipEntries(faultInputPath);
+        const faultSharedStrings = getSharedStrings(faultEntries);
+        const faultSheets = getSheets(faultEntries);
+        const firstSheet = faultSheets[0];
+        return firstSheet?.path ? readSheetRows(faultEntries, firstSheet.path, faultSharedStrings) : [];
+      })()
+    : faultSheet?.path
+      ? readSheetRows(entries, faultSheet.path, sharedStrings)
+      : [];
   const payload = {
-    objectModel: createObjectModel(objectModelRows),
+    objectModel: mergeObjectModels(objectModelModels),
     faults: createFaultModel(faultRows),
   };
 
@@ -378,6 +501,7 @@ function main() {
     JSON.stringify(
       {
         inputPath,
+        faultInputPath: faultInputPath || null,
         outputPath,
         fields: payload.objectModel.fields.length,
         modules: payload.objectModel.modules.length,

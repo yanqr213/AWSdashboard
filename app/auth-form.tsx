@@ -1,17 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-type AuthFormProps = {
-  mode: "login" | "register";
-};
-
-export function AuthForm({ mode }: AuthFormProps) {
+export function AuthForm() {
   const router = useRouter();
-  const [email, setEmail] = useState(mode === "login" ? "qirui.yan@yituishui.cn" : "");
-  const [password, setPassword] = useState(mode === "login" ? "y11531752" : "");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -21,7 +16,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
     startTransition(() => {
       void (async () => {
-        const response = await fetch(mode === "login" ? "/api/auth/login" : "/api/auth/register", {
+        const response = await fetch("/api/auth/login", {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -38,14 +33,8 @@ export function AuthForm({ mode }: AuthFormProps) {
           return;
         }
 
-        if (mode === "login") {
-          router.replace("/");
-          router.refresh();
-          return;
-        }
-
-        setMessage("注册成功，请使用新账号登录。");
-        setPassword("");
+        router.replace("/");
+        router.refresh();
       })();
     });
   }
@@ -53,8 +42,8 @@ export function AuthForm({ mode }: AuthFormProps) {
   return (
     <form className="auth-form-card" onSubmit={handleSubmit}>
       <div className="panel-header">
-        <h1>{mode === "login" ? "登录平台" : "注册账号"}</h1>
-        <span className="panel-kicker">{mode === "login" ? "支持超级管理员和普通账号登录" : "注册后默认是普通账号"}</span>
+        <h1>登录平台</h1>
+        <span className="panel-kicker">支持超级管理员和普通账号登录，账号需由管理员创建</span>
       </div>
 
       <label className="field-shell">
@@ -70,20 +59,8 @@ export function AuthForm({ mode }: AuthFormProps) {
       {message ? <div className="notice notice-warning">{message}</div> : null}
 
       <button type="submit" className="button-primary" disabled={isPending}>
-        {isPending ? "处理中..." : mode === "login" ? "登录" : "注册"}
+        {isPending ? "处理中..." : "登录"}
       </button>
-
-      <div className="auth-form-links">
-        {mode === "login" ? (
-          <Link href="/register" className="button-secondary button-link">
-            去注册
-          </Link>
-        ) : (
-          <Link href="/login" className="button-secondary button-link">
-            去登录
-          </Link>
-        )}
-      </div>
     </form>
   );
 }

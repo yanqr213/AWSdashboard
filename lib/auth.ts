@@ -132,6 +132,18 @@ function verifyPassword(password: string, passwordHash: string) {
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
 
+function validatePasswordInput(password: string) {
+  if (!password.trim()) {
+    return "密码不能为空。";
+  }
+
+  if (password.length < 8) {
+    return "密码至少 8 位。";
+  }
+
+  return null;
+}
+
 function encryptCookieSession(session: AuthCookieSession) {
   return encryptText(JSON.stringify(session));
 }
@@ -237,6 +249,14 @@ function getSeedAdminPassword() {
   return process.env.SEED_ADMIN_PASSWORD?.trim() || "y11531752";
 }
 
+function getSeedUserEmail() {
+  return normalizeEmail(process.env.SEED_USER_EMAIL?.trim() || "dashboard@yituishui.com");
+}
+
+function getSeedUserPassword() {
+  return process.env.SEED_USER_PASSWORD?.trim() || "xiaomutech123";
+}
+
 function pruneExpiredSessions(store: AuthStore) {
   const now = Date.now();
   return {
@@ -245,30 +265,48 @@ function pruneExpiredSessions(store: AuthStore) {
   };
 }
 
-async function ensureSeedAdmin() {
+async function ensureSeedAccounts() {
   const store = pruneExpiredSessions(await readStoreFile());
-  const seedEmail = getSeedAdminEmail();
+  const seedAccounts = [
+    {
+      email: getSeedAdminEmail(),
+      password: getSeedAdminPassword(),
+      role: "super-admin" as const,
+    },
+    {
+      email: getSeedUserEmail(),
+      password: getSeedUserPassword(),
+      role: "user" as const,
+    },
+  ];
+  let changed = false;
 
-  if (store.users.some((user) => normalizeEmail(user.email) === seedEmail)) {
-    await writeStoreFile(store);
-    return store;
+  for (const seedAccount of seedAccounts) {
+    if (store.users.some((user) => normalizeEmail(user.email) === seedAccount.email)) {
+      continue;
+    }
+
+    const now = new Date().toISOString();
+    store.users.push({
+      id: randomUUID(),
+      email: seedAccount.email,
+      passwordHash: hashPassword(seedAccount.password),
+      role: seedAccount.role,
+      createdAt: now,
+      updatedAt: now,
+    });
+    changed = true;
   }
 
-  const now = new Date().toISOString();
-  store.users.push({
-    id: randomUUID(),
-    email: seedEmail,
-    passwordHash: hashPassword(getSeedAdminPassword()),
-    role: "super-admin",
-    createdAt: now,
-    updatedAt: now,
-  });
-  await writeStoreFile(store);
+  if (changed) {
+    await writeStoreFile(store);
+  }
+
   return store;
 }
 
 async function getMutableStore() {
-  return ensureSeedAdmin();
+  return ensureSeedAccounts();
 }
 
 async function setSessionCookie(user: SafeAuthUser) {
@@ -365,46 +403,9 @@ export async function loginUser(email: string, password: string) {
 }
 
 export async function registerUser(email: string, password: string) {
-  const normalizedEmail = normalizeEmail(email);
-  const store = await getMutableStore();
-
-  if (!normalizedEmail || !password.trim()) {
-    return {
-      ok: false as const,
-      error: "邮箱和密码不能为空。",
-    };
-  }
-
-  if (password.length < 8) {
-    return {
-      ok: false as const,
-      error: "密码至少 8 位。",
-    };
-  }
-
-  if (store.users.some((user) => normalizeEmail(user.email) === normalizedEmail)) {
-    return {
-      ok: false as const,
-      error: "该账号已经存在。",
-    };
-  }
-
-  const now = new Date().toISOString();
-  const user: AuthAccount = {
-    id: randomUUID(),
-    email: normalizedEmail,
-    passwordHash: hashPassword(password),
-    role: "user",
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  store.users.push(user);
-  await writeStoreFile(store);
-
   return {
-    ok: true as const,
-    user: toSafeUser(user),
+    ok: false as const,
+    error: "当前平台不支持自助注册，请联系管理员创建账号。",
   };
 }
 
@@ -422,11 +423,12 @@ export async function createAccountByAdmin(email: string, password: string, role
   await requireSuperAdmin();
   const normalizedEmail = normalizeEmail(email);
   const store = await getMutableStore();
+  const passwordError = validatePasswordInput(password);
 
-  if (!normalizedEmail || !password.trim()) {
+  if (!normalizedEmail || passwordError) {
     return {
       ok: false as const,
-      error: "邮箱和密码不能为空。",
+      error: !normalizedEmail ? "邮箱不能为空。" : passwordError,
     };
   }
 
@@ -455,14 +457,53 @@ export async function updateAccountPasswordByAdmin(userId: string, password: str
   await requireSuperAdmin();
   const store = await getMutableStore();
   const user = store.users.find((item) => item.id === userId);
+  const passwordError = validatePasswordInput(password);
 
   if (!user) {
     return { ok: false as const, error: "账号不存在。" };
   }
 
+  if (passwordError) {
+    return { ok: false as const, error: passwordError };
+  }
+
   user.passwordHash = hashPassword(password);
   user.updatedAt = new Date().toISOString();
   await writeStoreFile(store);
+
+  return { ok: true as const };
+}
+
+export async function updateCurrentUserPassword(currentPassword: string, nextPassword: string) {
+  const currentUser = await requireAuthenticatedUser();
+  const store = await getMutableStore();
+  const user = store.users.find((item) => item.id === currentUser.id);
+  const passwordError = validatePasswordInput(nextPassword);
+
+  if (!user) {
+    return { ok: false as const, error: "账号不存在。" };
+  }
+
+  if (!currentPassword.trim()) {
+    return { ok: false as const, error: "当前密码不能为空。" };
+  }
+
+  if (passwordError) {
+    return { ok: false as const, error: passwordError };
+  }
+
+  if (!verifyPassword(currentPassword, user.passwordHash)) {
+    return { ok: false as const, error: "当前密码错误。" };
+  }
+
+  if (verifyPassword(nextPassword, user.passwordHash)) {
+    return { ok: false as const, error: "新密码不能与当前密码相同。" };
+  }
+
+  user.passwordHash = hashPassword(nextPassword);
+  user.updatedAt = new Date().toISOString();
+  await writeStoreFile(store);
+  await setSessionCookie(toSafeUser(user));
 
   return { ok: true as const };
 }
